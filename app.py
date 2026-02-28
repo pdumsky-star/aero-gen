@@ -76,14 +76,20 @@ def build_complex(catalog, length):
         fig_rolls, fig_total_k = [], base["k"]
         
         for line in base["lines"]:
-            if random.random() < 0.8 and line in catalog["rolls"]:
+            # Проверяем: 1. Нужен ли ролл, 2. Есть ли такой тип линии, 3. НЕ ПУСТОЙ ли список роллов
+            if (random.random() < 0.8 and 
+                line in catalog["rolls"] and 
+                len(catalog["rolls"][line]) > 0): # Защита от IndexError
+                
                 roll = random.choice(catalog["rolls"][line])
                 fig_rolls.append(roll)
                 fig_total_k += roll["k"]
         
         complex_data.append({
-            "base_id": base["id"], "base_k": base["k"],
-            "rolls": fig_rolls, "total_k": fig_total_k
+            "base_id": base["id"], 
+            "base_k": base["k"],
+            "rolls": fig_rolls, 
+            "total_k": fig_total_k
         })
         curr_pos, on_y = base["out"], (not on_y if base["y"] else on_y)
     return complex_data
