@@ -1,22 +1,40 @@
 {
   "bases": [
-    {"id": "1.1.1.1", "k": 2, "in": "U", "out": "U", "y": false, "desc": "Line"},
-    {"id": "1.1.1.2", "k": 2, "in": "I", "out": "I", "y": false, "desc": "Inverted Line"},
-    {"id": "5.2.1.1", "k": 17, "in": "U", "out": "U", "y": false, "desc": "Stall Turn"},
-    {"id": "7.4.1.1", "k": 14, "in": "U", "out": "I", "y": false, "desc": "Half Cuban"},
-    {"id": "7.4.1.2", "k": 14, "in": "I", "out": "U", "y": false, "desc": "Inverted Half Cuban"},
-    {"id": "8.4.1.1", "k": 13, "in": "U", "out": "U", "y": false, "desc": "Humpty Bump"},
-    {"id": "8.5.2.1", "k": 20, "in": "U", "out": "U", "y": true, "desc": "Half Cuban to Y-axis"},
-    {"id": "8.6.3.1", "k": 21, "in": "U", "out": "I", "y": true, "desc": "P-Loop to Y-axis"},
-    {"id": "2.2.1.1", "k": 15, "in": "U", "out": "U", "y": false, "desc": "90 deg Turn"},
-    {"id": "7.2.2.1", "k": 18, "in": "U", "out": "I", "y": false, "desc": "Half Square Loop"},
-    {"id": "8.4.2.1", "k": 15, "in": "I", "out": "I", "y": false, "desc": "Inverted Humpty"}
+    {"id": "1.1.1.1", "k": 2, "in": "U", "out": "U", "y": false, "lines": ["hor"], "desc": "Line Upright"},
+    {"id": "1.1.1.2", "k": 2, "in": "I", "out": "I", "y": false, "lines": ["hor"], "desc": "Line Inverted"},
+    {"id": "1.2.7.1", "k": 13, "in": "U", "out": "U", "y": false, "lines": ["v_up", "v_dw"], "desc": "Double Humpty"},
+    {"id": "2.2.1.1", "k": 15, "in": "U", "out": "U", "y": false, "lines": ["cir"], "desc": "90 deg Turn"},
+    {"id": "2.4.4.1", "k": 46, "in": "U", "out": "U", "y": false, "lines": ["cir"], "desc": "Rolling Circle"},
+    {"id": "5.2.1.1", "k": 17, "in": "U", "out": "U", "y": false, "lines": ["v_up", "v_dw"], "desc": "Stall Turn"},
+    {"id": "6.2.1.1", "k": 15, "in": "U", "out": "U", "y": false, "lines": ["v_dw"], "desc": "Tail Slide"},
+    {"id": "7.2.2.1", "k": 18, "in": "U", "out": "I", "y": false, "lines": ["hor", "v_up"], "desc": "Half Square Loop"},
+    {"id": "7.4.1.1", "k": 14, "in": "U", "out": "I", "y": false, "lines": ["45_dw"], "desc": "Half Cuban"},
+    {"id": "7.4.3.1", "k": 14, "in": "U", "out": "I", "y": false, "lines": ["45_up"], "desc": "Reverse Half Cuban"},
+    {"id": "8.4.1.1", "k": 13, "in": "U", "out": "U", "y": false, "lines": ["v_up", "v_dw"], "desc": "Humpty Bump"},
+    {"id": "8.5.2.1", "k": 20, "in": "U", "out": "U", "y": true, "lines": ["45_up"], "desc": "Half Cuban to Y-axis"},
+    {"id": "8.6.8.1", "k": 15, "in": "U", "out": "U", "y": false, "lines": ["v_up", "v_dw"], "desc": "P-Loop"},
+    {"id": "8.8.7.2", "k": 21, "in": "I", "out": "U", "y": false, "lines": ["v_dw"], "desc": "Double Humpty"}
   ],
-  "rolls": [
-    {"id": "9.1.1.1", "k": 6, "name": "Slow Roll"},
-    {"id": "9.4.3.4", "k": 11, "name": "4-point Roll"},
-    {"id": "9.11.1.1", "k": 15, "name": "Positive Snap"},
-    {"id": "9.12.1.1", "k": 17, "name": "Negative Snap"},
-    {"id": "9.1.1.2", "k": 8, "name": "2-point Roll"}
-  ]
+  "rolls": {
+    "hor": [
+      {"id": "9.1.1.1", "k": 6}, {"id": "9.4.3.4", "k": 11}, {"id": "9.1.3.2", "k": 4},
+      {"id": "9.11.1.1", "k": 15}, {"id": "9.12.1.1", "k": 17}
+    ],
+    "v_up": [
+      {"id": "9.1.1.2", "k": 8}, {"id": "9.4.2.2", "k": 7}, {"id": "9.9.10.4", "k": 13},
+      {"id": "9.10.6.4", "k": 19}, {"id": "9.1.3.7", "k": 11}, {"id": "9.1.3.5", "k": 9}
+    ],
+    "v_dw": [
+      {"id": "9.1.5.2", "k": 4}, {"id": "9.1.5.4", "k": 8}, {"id": "9.10.8.4", "k": 15},
+      {"id": "9.10.6.3", "k": 19}, {"id": "9.12.1.5", "k": 6}, {"id": "9.1.3.8", "k": 12}
+    ],
+    "45_up": [
+      {"id": "9.1.2.2", "k": 6}, {"id": "9.4.2.2", "k": 7}, {"id": "9.10.7.4", "k": 17},
+      {"id": "9.9.8.2", "k": 13}
+    ],
+    "45_dw": [
+      {"id": "9.1.4.2", "k": 4}, {"id": "9.1.4.4", "k": 8}, {"id": "9.10.9.4", "k": 15}
+    ],
+    "cir": []
+  }
 }
