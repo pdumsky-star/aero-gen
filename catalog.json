@@ -4,15 +4,19 @@
     {"id": "1.1.1.2", "k": 2, "in": "I", "out": "I", "y": false, "desc": "Inverted Line"},
     {"id": "5.2.1.1", "k": 17, "in": "U", "out": "U", "y": false, "desc": "Stall Turn"},
     {"id": "7.4.1.1", "k": 14, "in": "U", "out": "I", "y": false, "desc": "Half Cuban"},
+    {"id": "7.4.1.2", "k": 14, "in": "I", "out": "U", "y": false, "desc": "Inverted Half Cuban"},
     {"id": "8.4.1.1", "k": 13, "in": "U", "out": "U", "y": false, "desc": "Humpty Bump"},
-    {"id": "8.5.2.1", "k": 20, "in": "U", "out": "U", "y": true, "desc": "Half Cuban (Y-axis exit)"},
+    {"id": "8.5.2.1", "k": 20, "in": "U", "out": "U", "y": true, "desc": "Half Cuban to Y-axis"},
     {"id": "8.6.3.1", "k": 21, "in": "U", "out": "I", "y": true, "desc": "P-Loop to Y-axis"},
-    {"id": "2.2.1.1", "k": 15, "in": "U", "out": "U", "y": false, "desc": "90 deg Turn"}
+    {"id": "2.2.1.1", "k": 15, "in": "U", "out": "U", "y": false, "desc": "90 deg Turn"},
+    {"id": "7.2.2.1", "k": 18, "in": "U", "out": "I", "y": false, "desc": "Half Square Loop"},
+    {"id": "8.4.2.1", "k": 15, "in": "I", "out": "I", "y": false, "desc": "Inverted Humpty"}
   ],
   "rolls": [
     {"id": "9.1.1.1", "k": 6, "name": "Slow Roll"},
     {"id": "9.4.3.4", "k": 11, "name": "4-point Roll"},
     {"id": "9.11.1.1", "k": 15, "name": "Positive Snap"},
-    {"id": "9.12.1.1", "k": 17, "name": "Negative Snap"}
+    {"id": "9.12.1.1", "k": 17, "name": "Negative Snap"},
+    {"id": "9.1.1.2", "k": 8, "name": "2-point Roll"}
   ]
 }
