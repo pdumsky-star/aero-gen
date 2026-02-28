@@ -9,9 +9,13 @@ def load_catalog():
         return json.load(f)
 
 def generate_seq_xml(sequence_data):
-    """Формирует XML структуру формата .seq на основе ваших файлов"""
+    """Исправленная генерация XML для полной совместимости с OpenAero"""
     root = ET.Element("sequence")
     ET.SubElement(root, "class").text = "powered"
+    # Добавляем пустой тег sequence_text, который есть во всех рабочих файлах
+    ET.SubElement(root, "sequence_text").text = ""
+    ET.SubElement(root, "oa_version").text = "2024.1.1" # Имитируем свежую версию
+    ET.SubElement(root, "default_view").text = "B"
     
     figures_ele = ET.SubElement(root, "figures")
     total_k = 0
@@ -19,36 +23,36 @@ def generate_seq_xml(sequence_data):
     for i, fig in enumerate(sequence_data):
         figure = ET.SubElement(figures_ele, "figure")
         ET.SubElement(figure, "nr").text = str(i + 1)
-        ET.SubElement(figure, "sf").text = "4" # Стандартный тип секции
+        ET.SubElement(figure, "sf").text = "4"
         
         # Базовая фигура
         el_base = ET.SubElement(figure, "element")
-        ET.SubElement(el_base, "aresti").text = fig["base_id"]
+        ET.SubElement(el_base, "aresti").text = str(fig["base_id"])
         ET.SubElement(el_base, "k").text = str(fig["base_k"])
         
         # Вращения
         for r in fig["rolls"]:
             el_roll = ET.SubElement(figure, "element")
-            ET.SubElement(el_roll, "aresti").text = r["id"]
+            ET.SubElement(el_roll, "aresti").text = str(r["id"])
             ET.SubElement(el_roll, "k").text = str(r["k"])
         
         ET.SubElement(figure, "figk").text = str(fig["total_k"])
         total_k += fig["total_k"]
     
+    # Добавляем обязательные итоговые теги [cite: 34, 80, 118]
     ET.SubElement(figures_ele, "figurek").text = str(total_k)
     ET.SubElement(figures_ele, "totalk").text = str(total_k)
     
-    # Системные настройки (как в ваших примерах)
-    settings = ET.SubElement(root, "settings")
-    for key, val in [("language", "en"), ("gridColumns", "5"), ("showHandles", "true")]:
+    settings = ET.SubElement(root, "settings", {"xmlns": "http://www.w3.org/1999/xhtml"})
+    # Минимальный набор настроек из ваших файлов [cite: 35-43]
+    for k, v in [("language", "en"), ("gridColumns", "5"), ("showHandles", "true")]:
         s = ET.SubElement(settings, "setting")
-        ET.SubElement(s, "key").text = key
-        ET.SubElement(s, "value").text = val
+        ET.SubElement(s, "key").text = k
+        ET.SubElement(s, "value").text = v
 
-    # Красивое форматирование XML
-    xml_str = ET.tostring(root, encoding='utf-8')
-    return minidom.parseString(xml_str).toprettyxml(indent="    ")
-
+    # Возвращаем "плотный" XML без лишних отступов
+    return ET.tostring(root, encoding='utf-8', xml_declaration=True)
+    
 def build_complex(catalog, length):
     complex_data = []
     curr_pos, on_y = "U", False
