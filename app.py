@@ -2,19 +2,18 @@ import streamlit as st
 import random
 import json
 import xml.etree.ElementTree as ET
-from xml.dom import minidom
 
+# Загрузка каталога (оставляем без изменений)
 def load_catalog():
     with open('catalog.json', 'r', encoding='utf-8') as f:
         return json.load(f)
 
 def generate_seq_xml(sequence_data):
-    """Исправленная генерация XML для полной совместимости с OpenAero"""
+    """Генерирует XML без декларации и лишних пробелов для 100% совместимости"""
     root = ET.Element("sequence")
     ET.SubElement(root, "class").text = "powered"
-    # Добавляем пустой тег sequence_text, который есть во всех рабочих файлах
-    ET.SubElement(root, "sequence_text").text = ""
-    ET.SubElement(root, "oa_version").text = "2024.1.1" # Имитируем свежую версию
+    ET.SubElement(root, "sequence_text").text = "" # Обязательно для парсера OpenAero
+    ET.SubElement(root, "oa_version").text = "2024.1.1"
     ET.SubElement(root, "default_view").text = "B"
     
     figures_ele = ET.SubElement(root, "figures")
@@ -39,20 +38,20 @@ def generate_seq_xml(sequence_data):
         ET.SubElement(figure, "figk").text = str(fig["total_k"])
         total_k += fig["total_k"]
     
-    # Добавляем обязательные итоговые теги [cite: 34, 80, 118]
     ET.SubElement(figures_ele, "figurek").text = str(total_k)
     ET.SubElement(figures_ele, "totalk").text = str(total_k)
     
+    # Настройки с пространством имен как в оригинале
     settings = ET.SubElement(root, "settings", {"xmlns": "http://www.w3.org/1999/xhtml"})
-    # Минимальный набор настроек из ваших файлов [cite: 35-43]
     for k, v in [("language", "en"), ("gridColumns", "5"), ("showHandles", "true")]:
         s = ET.SubElement(settings, "setting")
         ET.SubElement(s, "key").text = k
         ET.SubElement(s, "value").text = v
 
-    # Возвращаем "плотный" XML без лишних отступов
-    return ET.tostring(root, encoding='utf-8', xml_declaration=True)
-    
+    # Генерируем строку БЕЗ <?xml ... ?>
+    return ET.tostring(root, encoding='utf-8', method='xml').decode('utf-8')
+
+# Логика сборки комплекса (оставляем без изменений)
 def build_complex(catalog, length):
     complex_data = []
     curr_pos, on_y = "U", False
@@ -66,7 +65,6 @@ def build_complex(catalog, length):
         base = random.choice(possible)
         fig_rolls, fig_total_k = [], base["k"]
         
-        # Добавляем вращения только на разрешенные линии
         for line in base["lines"]:
             if random.random() < 0.8 and line in catalog["rolls"] and catalog["rolls"][line]:
                 roll = random.choice(catalog["rolls"][line])
@@ -81,29 +79,22 @@ def build_complex(catalog, length):
             
     return complex_data
 
-# Streamlit Интерфейс
-st.set_page_config(page_title="Unlimited SEQ Gen", page_icon="✈️")
+# Streamlit UI
 st.title("🏆 Unlimited .SEQ Generator")
 
 try:
     catalog = load_catalog()
-    num_figs = st.sidebar.slider("Количество фигур", 5, 20, 12)
+    num_figs = st.sidebar.slider("Фигур", 5, 20, 12)
     
-    if st.button("Сгенерировать тренировку"):
+    if st.button("Сгенерировать .seq"):
         seq_data = build_complex(catalog, num_figs)
         xml_res = generate_seq_xml(seq_data)
         
-        st.success(f"Сгенерирован комплекс на {len(seq_data)} фигур!")
         st.download_button(
             label="📥 Скачать файл .seq",
             data=xml_res,
             file_name="Training_Unlimited.seq",
             mime="application/xml"
         )
-        
-        for i, f in enumerate(seq_data):
-            rolls_str = ", ".join([r['id'] for r in f['rolls']])
-            st.write(f"**{i+1}.** {f['base_id']} + [{rolls_str}] (K: {f['total_k']})")
-
 except FileNotFoundError:
-    st.error("Ошибка: Положите catalog.json в папку со скриптом!")
+    st.error("catalog.json не найден!")
