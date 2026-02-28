@@ -1,77 +1,65 @@
 import streamlit as st
 import random
 import urllib.parse
+import json
 
-# Упрощенная база данных фигур (на старте внесем сюда основные элементы Unlimited)
-# В полной версии мы вынесем это в отдельный json
-CATALOG = {
-    "bases": [
-        {"id": "1.1.1.1", "k": 2, "in": "U", "out": "U", "y": False, "name": "Line"},
-        {"id": "7.4.1.1", "k": 14, "in": "U", "out": "I", "y": False, "name": "Half Cuban"},
-        {"id": "8.4.1.1", "k": 11, "in": "U", "out": "U", "y": False, "name": "Humpty Bump"},
-        {"id": "5.2.1.1", "k": 17, "in": "U", "out": "U", "y": False, "name": "Stall Turn"},
-        {"id": "8.5.2.1", "k": 20, "in": "U", "out": "U", "y": True, "name": "Half Cuban to Y"},
-        {"id": "2.1.1.1", "k": 12, "in": "U", "out": "U", "y": False, "name": "Rolling Circle (90 deg)"}
-    ],
-    "rolls": [
-        {"id": "9.1.1.1", "k": 6, "name": "Slow Roll"},
-        {"id": "9.11.1.1", "k": 15, "name": "Snap Roll"},
-        {"id": "9.4.3.4", "k": 11, "name": "4-point Roll"}
-    ]
-}
+def load_catalog():
+    with open('catalog.json', 'r') as f:
+        return json.load(f)
 
-def generate_sequence(length):
+def generate_unlimited_sequence(catalog, length):
     seq = []
-    current_pos = "U" # Upright
+    current_pos = "U" # U - Upright, I - Inverted
     on_y_axis = False
     
-    for i in range(length):
-        # Фильтруем фигуры: вход должен совпадать с выходом предыдущей
-        # И если мы на оси Y, следующая фигура должна вернуть нас на X
+    for _ in range(length):
+        # Логика выбора:
+        # 1. Если мы на оси Y, ищем фигуры с y=true (они возвращают на X)
+        # 2. Вход (in) должен соответствовать текущему положению (current_pos)
         possible = [
-            f for f in CATALOG["bases"] 
-            if f["in"] == current_pos and (not on_y_axis or f["y"])
+            b for b in catalog["bases"]
+            if b["in"] == current_pos and (on_y_axis == b["y"] or b["y"] == True)
         ]
         
-        if not possible: break # Предохранитель
+        if not possible: break
         
-        fig = random.choice(possible).copy()
+        base = random.choice(possible)
+        fig_id = base["id"]
+        total_k = base["k"]
         
-        # Для Unlimited добавляем вращение (Family 9)
-        if random.random() > 0.4:
-            roll = random.choice(CATALOG["rolls"])
-            fig["id"] = f"{fig['id']}({roll['id']})"
-            fig["k"] += roll["k"]
+        # Добавляем вращение для Unlimited (шанс 70%)
+        if random.random() < 0.7:
+            roll = random.choice(catalog["rolls"])
+            fig_id = f"{fig_id}({roll['id']})"
+            total_k += roll["k"]
             
-        seq.append(fig)
-        current_pos = fig["out"]
-        # Если фигура меняет ось, переключаем флаг
-        if fig["y"]:
+        seq.append({"id": fig_id, "k": total_k, "desc": base["desc"]})
+        
+        # Обновляем состояние
+        current_pos = base["out"]
+        if base["y"]:
             on_y_axis = not on_y_axis
             
     return seq
 
-# Интерфейс Streamlit
-st.set_page_config(page_title="Unlimited Aero Gen", page_icon="✈️")
-st.title("✈️ Unlimited Aerobatic Generator")
-st.write("Генератор тренировочных комплексов для категории Unlimited.")
+# Интерфейс
+st.title("🛩️ CIVA Unlimited Generator")
 
-count = st.slider("Количество фигур в комплексе", 5, 20, 10)
-
-if st.button("Сгенерировать новый комплекс"):
-    sequence = generate_sequence(count)
+try:
+    catalog = load_catalog()
+    count = st.sidebar.slider("Фигур в комплексе", 5, 15, 10)
     
-    # Собираем OLAN строку
-    olan_parts = [f["id"] for f in sequence]
-    olan_string = ",".join(olan_parts)
-    
-    # Ссылка на OpenAero
-    link = f"https://openaero.net/#olan={urllib.parse.quote(olan_string)}"
-    
-    st.subheader("Ваш комплекс:")
-    for idx, f in enumerate(sequence):
-        st.write(f"{idx+1}. {f['id']} (K: {f['k']})")
-    
-    st.link_button("🚀 Открыть в OpenAero (Визуализировать)", link)
-
-st.info("Это MVP. Логика будет дополняться правилами CIVA.")
+    if st.button("Сгенерировать комплекс"):
+        sequence = generate_unlimited_sequence(catalog, count)
+        
+        olan_string = ",".join([f["id"] for f in sequence])
+        link = f"https://openaero.net/#olan={urllib.parse.quote(olan_string)}"
+        
+        st.success(f"Комплекс из {len(sequence)} фигур готов!")
+        st.link_button("Открыть в OpenAero ↗️", link)
+        
+        for idx, f in enumerate(sequence):
+            st.write(f"**{idx+1}.** {f['id']} — {f['desc']} (K: {f['k']})")
+            
+except FileNotFoundError:
+    st.error("Ошибка: Создайте файл catalog.json в репозитории!")
