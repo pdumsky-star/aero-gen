@@ -2,23 +2,25 @@ import streamlit as st
 import random
 import json
 
+# 1. Загрузка каталога фигур
 def load_catalog():
     with open('catalog.json', 'r', encoding='utf-8') as f:
         return json.load(f)
 
+# 2. Ручная сборка XML для 100% совместимости с форматом .seq
 def generate_seq_xml_raw(sequence_data):
-    """Ручная сборка XML для 100% идентичности с оригиналами OpenAero"""
-    
-    # Формируем блоки фигур
+    # Формируем блоки фигур (теги <figure>)
     figs_xml = ""
     total_k = 0
     for i, fig in enumerate(sequence_data):
+        # Базовый элемент фигуры
         elements_xml = f"""
             <element>
                 <aresti>{fig['base_id']}</aresti>
                 <k>{fig['base_k']}</k>
             </element>"""
         
+        # Добавленные вращения (rolls)
         for r in fig["rolls"]:
             elements_xml += f"""
             <element>
@@ -34,8 +36,8 @@ def generate_seq_xml_raw(sequence_data):
         </figure>"""
         total_k += fig['total_k']
 
-    # Собираем итоговый файл (без <?xml...?> и с правильными отступами)
-    # Структура основана на [cite: 1, 35, 219]
+    # Итоговый XML без декларации <?xml...?> для предотвращения ошибок импорта
+    # Добавлены ключи rules=CIVA и category=Unlimited для автоматической отрисовки
     final_xml = f"""<sequence>
     <class>powered</class>
     <sequence_text></sequence_text>
@@ -46,71 +48,20 @@ def generate_seq_xml_raw(sequence_data):
         <totalk>{total_k}</totalk>
     </figures>
     <settings xmlns="http://www.w3.org/1999/xhtml">
-        <setting>
-            <key>language</key>
-            <value>en</value>
-        </setting>
-        <setting>
-            <key>gridColumns</key>
-            <value>5</value>
-        </setting>
-        <setting>
-            <key>showHandles</key>
-            <value>true</value>
-        </setting>
+        <setting><key>language</key><value>en</value></setting>
+        <setting><key>rules</key><value>CIVA</value></setting>
+        <setting><key>category</key><value>Unlimited</value></setting>
+        <setting><key>gridColumns</key><value>5</value></setting>
+        <setting><key>showHandles</key><value>true</value></setting>
     </settings>
 </sequence>"""
     return final_xml
 
+# 3. Логика построения комплекса (движок генерации)
 def build_complex(catalog, length):
     complex_data = []
-    curr_pos, on_y = "U", False
+    curr_pos, on_y = "U", False # U - upright, I - inverted
     
     for _ in range(length):
-        possible = [b for b in catalog["bases"] if b["in"] == curr_pos and (not on_y or b["y"])]
-        if not possible: 
-            curr_pos, on_y = "U", False
-            continue
-            
-        base = random.choice(possible)
-        fig_rolls, fig_total_k = [], base["k"]
-        
-        for line in base["lines"]:
-            # Проверяем: 1. Нужен ли ролл, 2. Есть ли такой тип линии, 3. НЕ ПУСТОЙ ли список роллов
-            if (random.random() < 0.8 and 
-                line in catalog["rolls"] and 
-                len(catalog["rolls"][line]) > 0): # Защита от IndexError
-                
-                roll = random.choice(catalog["rolls"][line])
-                fig_rolls.append(roll)
-                fig_total_k += roll["k"]
-        
-        complex_data.append({
-            "base_id": base["id"], 
-            "base_k": base["k"],
-            "rolls": fig_rolls, 
-            "total_k": fig_total_k
-        })
-        curr_pos, on_y = base["out"], (not on_y if base["y"] else on_y)
-    return complex_data
-
-# Streamlit UI
-st.title("✈️ Unlimited .SEQ Generator PRO")
-
-try:
-    catalog = load_catalog()
-    num_figs = st.sidebar.slider("Количество фигур", 5, 15, 12)
-    
-    if st.button("Сгенерировать .seq"):
-        seq_data = build_complex(catalog, num_figs)
-        xml_res = generate_seq_xml_raw(seq_data)
-        
-        st.download_button(
-            label="📥 Скачать файл .seq",
-            data=xml_res,
-            file_name="Training_Unlimited.seq",
-            mime="application/xml"
-        )
-        st.success("Файл готов! Просто перетащите его в OpenAero.")
-except FileNotFoundError:
-    st.error("catalog.json не найден!")
+        # Фильтрация фигур по точке входа и текущей оси (X/Y)
+        possible = [b for b in catalog["bases"] if b["in"] == curr_
