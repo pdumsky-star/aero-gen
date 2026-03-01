@@ -8,99 +8,94 @@ def load_database():
         with open('civa_database.json', 'r', encoding='utf-8') as f:
             return json.load(f)
     except FileNotFoundError:
-        st.error("❌ Файл civa_database.json не найден! Запустите parser.py")
+        st.error("❌ Файл civa_database.json не найден!")
         st.stop()
 
 # ==========================================
-# 1. ФИЗИЧЕСКИЙ ДВИЖОК (АНАЛИЗАТОР АРЕСТИ)
+# 1. АЭРОДИНАМИЧЕСКИЙ ДВИЖОК (ЧТЕНИЕ АРЕСТИ)
 # ==========================================
 def analyze_figure_physics(aresti_list):
-    """Вычисляет все аэродинамические свойства фигуры на основе кодов Арести"""
+    if not aresti_list: return None
     base = aresti_list[0]
-    family = int(base.split('.')[0])
+    parts = base.split('.')
+    if len(parts) < 4: return None
     
-    # 1. Положение (Attitude: Entry & Flip)
-    req_entry = 'Any'
-    base_flip = False
-    
-    # Требуют перевернутого входа (Сплиты, нисходящие петли, нисходящие кубинцы)
-    if base.startswith(('7.2.3', '7.2.4', '8.5.5', '8.5.6', '8.5.7', '8.5.8', '7.4.4', '7.4.5', '7.4.6')):
-        req_entry = 'I'
-    # Требуют прямого входа (Иммельманы, восходящие петли, обычные/обратные кубинцы)
-    elif base.startswith(('7.2.1', '7.2.2', '8.5.1', '8.5.2', '8.5.3', '8.5.4', '7.4.1', '7.4.2', '7.4.3')):
-        req_entry = 'U'
-        
-    # Базовая геометрия переворачивает самолет? (Полупетли, Кубинцы)
-    if base.startswith('7.2') or base.startswith('8.5'):
-        base_flip = True
+    family = int(parts[0])
+    sub = int(parts[1])
+    row = int(parts[2])
+    col = int(parts[3])
 
-    # Считаем бочки, которые переворачивают самолет (на горизонталях и 45 градусах)
+    # 1. ПОЛОЖЕНИЕ НА ВХОДЕ (Upright / Inverted)
+    # По правилам каталога Арести, 1 и 3 столбцы начинаются из прямого полета, 2 и 4 - со спины.
+    if family == 7 and sub == 2 and row in [3, 4]: # Исключение: Нисходящие полупетли (Split-S)
+        req_entry = 'U' if col in [1, 4] else 'I'
+    elif family == 1 and sub == 1 and row == 1: # Исключение: Горизонтальные пролеты
+        req_entry = 'U' if col in [1, 3] else 'I'
+    else:
+        req_entry = 'U' if col in [1, 3] else 'I'
+
+    # 2. БАЗОВЫЙ ПЕРЕВОРОТ (Меняет ли сама фигура положение без бочек?)
+    base_flip = False
+    if family == 7 and sub == 2: base_flip = True # Полупетли (Иммельман, Сплит)
+    if family == 8 and sub == 5: base_flip = True # Полукубинцы
+
+    # 3. ВРАЩЕНИЯ И ШТОПОРЫ
     roll_flips = 0
     has_spin = False
     changes_axis = False
-    
+
     for code in aresti_list[1:]:
         rp = code.split('.')
         if len(rp) == 4 and rp[0] == '9':
-            if rp[1] in ['11', '12']: has_spin = True
+            if rp[1] in ['11', '12', '13']: has_spin = True
             
-            b_line = int(rp[2]) # 1=horiz, 2=45up, 3=vert-up, 4=45down, 5=vert-down
-            c_rot = int(rp[3])  # 2=1/2, 4=1/1, 6=1.5
+            b_line = int(rp[2])
+            c_rot = int(rp[3])
             
-            # Половинчатые вращения на горизонталях/45 линиях переворачивают самолет
-            if b_line in [1, 2, 4] and c_rot in [2, 6]:
+            # Универсальное правило: 1/2 (2) и 1.5 (6) бочки на ЛЮБОЙ линии меняют положение самолета!
+            if c_rot in [2, 6]:
                 roll_flips += 1
-            # Нечетные вращения на вертикалях меняют ось (Y-box)
+                
+            # 1/4 (1) и 3/4 (3) бочки на вертикалях меняют ось (X <-> Y)
             if b_line in [3, 5] and c_rot % 2 != 0:
                 changes_axis = not changes_axis
 
-    # Итоговое изменение положения: База XOR Бочки
+    # Итоговое изменение положения (XOR базовой фигуры и бочек)
     net_flip = base_flip ^ (roll_flips % 2 != 0)
 
-    # 2. Скорость (Speed Management)
-    out_speed = 'HS' # По умолчанию выходим на большой скорости
-    req_speed = 'Any'
+    # 4. УПРАВЛЕНИЕ ЭНЕРГИЕЙ (Скорость на выходе)
+    out_speed = 'HS' # По умолчанию скорость большая
+    # Фигуры, которые выходят из вертикали/45 ВВЕРХ в горизонт, гасят скорость до минимальной (LS)
+    if family == 1 and sub == 1 and row == 6: out_speed = 'LS' 
+    if family == 1 and sub == 2 and row in [1, 2, 3, 4]: out_speed = 'LS'
+    if family == 7 and sub == 2 and row in [1, 2]: out_speed = 'LS' # Иммельманы
+    if family == 8 and sub == 6 and row in [1, 2, 3, 4]: out_speed = 'LS' # Reverse P-Loops
     
-    # Выходим на минимальной скорости (LS) после вертикалей вверх или Иммельманов
-    if base.startswith(('7.2.1', '7.2.2', '1.2.1', '1.2.2', '1.2.3', '1.2.4')):
-        out_speed = 'LS'
-    # Выходим на средней (MS) после виражей или горизонтальных пролетов
-    elif base.startswith('2.') or base.startswith('1.1.1'):
-        out_speed = 'MS'
+    if family == 2 or (family == 1 and sub == 1 and row == 1): out_speed = 'MS' # Виражи и прямые
 
-    # Штопор требует минимальной скорости (сваливания)
-    if has_spin: 
-        req_speed = 'LS'
-    # Плоские маневры и Сплит-С запрещены на огромной скорости
-    elif base.startswith(('2.', '1.1.1', '7.2.3', '7.2.4')): 
-        req_speed = 'MS_LS'
+    # Требования к скорости на входе
+    req_speed = 'Any'
+    if has_spin: req_speed = 'LS' # Штопор ТОЛЬКО на сваливании
+    elif family == 2 or (family == 1 and sub == 1 and row == 1): req_speed = 'MS_LS' # Плоские запрещены на HS
+    elif family == 7 and sub == 2 and row in [3, 4]: req_speed = 'MS_LS' # Сплит-С запрещен на HS
 
-    # 3. Сложность и Направление (Flow Control)
-    is_complex = len(aresti_list) >= 3 # Считаем сложной, если 2 и более вращений
-    is_turnaround = False
-    # Фигуры, которые разворачивают самолет на 180 градусов
-    if family in [5, 6] or base.startswith(('2.2', '7.2', '8.4', '8.5', '8.6')):
-        is_turnaround = True
+    # 5. СЛОЖНОСТЬ (Flow Control)
+    is_complex = len(aresti_list) >= 3
+    # Фигуры, разворачивающие полет на 180 градусов
+    is_turn = family in [5, 6, 8] or (family == 2 and sub == 2) or (family == 7 and sub == 2)
 
     return {
         "req_entry": req_entry, "net_flip": net_flip, 
         "out_speed": out_speed, "req_speed": req_speed,
-        "is_complex": is_complex, "is_turn": is_turnaround,
+        "is_complex": is_complex, "is_turn": is_turn,
         "changes_axis": changes_axis, "has_spin": has_spin
     }
 
-# Санитарный фильтр для удаления ошибок парсера
-def is_native_default(macro, aresti_list):
+# Санитарный фильтр (защита от мусора из парсера)
+def is_clean_macro(macro, aresti_list):
     m = macro.lower()
     if any(w in m for w in ["sequence", "generated", "unknown", "training", "unlimited", "free", "known"]): return False
-    m_let = re.sub(r'[^a-z]', '', m)
-    base = aresti_list[0]
-    if 'rc' in m_let: return base.startswith('8.5.2')
-    if 'c' in m_let and 'rc' not in m_let: return base.startswith('8.5.6') or base.startswith('8.5.5')
-    if 'm' in m_let: return base.startswith('7.2.2') or base.startswith('7.2.1')
-    if 'a' in m_let and not any(x in m_let for x in ['ta','ia']): return base.startswith('7.2.3') or base.startswith('7.2.4')
-    if 'h' in m_let and 'dh' not in m_let: return base.startswith('5.2.1')
-    if 'j' in m_let: return base.startswith('2.')
+    if not aresti_list or len(aresti_list[0].split('.')) < 4: return False
     return True
 
 # ==========================================
@@ -108,10 +103,9 @@ def is_native_default(macro, aresti_list):
 # ==========================================
 DATABASE = load_database()
 
-def build_aerodynamic_data_sequence(length):
+def build_tournament_sequence(length):
     sequence = []
     
-    # Стартовые условия турнирного полета
     current_att = "U"     # Начинаем пузом вниз
     current_speed = "MS"  # Стартовая скорость средняя
     current_axis = "X"    # Главная ось
@@ -119,46 +113,49 @@ def build_aerodynamic_data_sequence(length):
     figures_on_y = 0
     cons_complex = 0      # Счетчик сложных фигур подряд
 
-    # 1. Готовим и анализируем базу
+    # 1. Готовим базу
     clean_pool = []
     for family, figs in DATABASE.items():
         for f in figs:
-            if is_native_default(f["macro"], f["aresti"]):
+            if is_clean_macro(f["macro"], f["aresti"]):
                 physics = analyze_figure_physics(f["aresti"])
-                f.update(physics)
-                clean_pool.append(f)
+                if physics:
+                    f.update(physics)
+                    clean_pool.append(f)
 
     if not clean_pool:
-        st.error("В базе не осталось валидных фигур!")
+        st.error("В базе не осталось валидных фигур! Проверьте civa_database.json")
         return []
 
     # 2. Интеллектуальная сборка
     for i in range(length):
         valid_figs = []
         for f in clean_pool:
-            # Правило 1: Ориентация (Attitude) - Поддерживаем Inverted полет!
+            # Правило 1: Строгий трекинг положения самолета!
             if f["req_entry"] != 'Any' and f["req_entry"] != current_att: continue
             
-            # Правило 2: Скорость (Спин только на LS, запрет плоских на HS)
+            # Правило 2: Скорость (Штопор только на LS, запрет плоских на HS)
             if f["req_speed"] == 'LS' and current_speed != 'LS': continue
             if f["req_speed"] == 'MS_LS' and current_speed == 'HS': continue
             
-            # Правило 3: Перегрузка (Flow Control)
+            # Правило 3: Защита пилота от перегрузки
             if cons_complex >= 2:
-                # Требуем простую разворотную фигуру, чтобы сбросить напряжение
+                # Требуем ПРОСТУЮ фигуру, которая разворачивает самолет
                 if not f["is_turn"] or f["is_complex"]: continue
 
-            # Правило 4: Контроль оси Y
+            # Правило 4: Защита поперечной оси
             if current_axis == "Y" and figures_on_y >= 1 and not f["changes_axis"]: continue 
             if current_axis == "X" and f["changes_axis"] and i >= length - 2: continue 
 
             valid_figs.append(f)
 
-        # Failsafe: если фильтры оказались слишком жесткими, ослабляем Flow Control
+        # Failsafe: если фильтры слишком жесткие, ослабляем Flow Control
         if not valid_figs:
-            valid_figs = [f for f in clean_pool if (f["req_entry"] in ['Any', current_att]) and (f["req_speed"] != 'LS' or current_speed == 'LS')]
+            valid_figs = [f for f in clean_pool if f["req_entry"] == current_att and (f["req_speed"] != 'LS' or current_speed == 'LS')]
 
-        if not valid_figs: break # Совсем тупик (база слишком мала)
+        if not valid_figs: 
+            st.warning(f"Сборка остановлена на фигуре {i+1}: в базе нет подходящего маневра для текущего состояния (Положение: {current_att}, Скорость: {current_speed}).")
+            break
 
         fig = random.choice(valid_figs)
 
@@ -168,28 +165,31 @@ def build_aerodynamic_data_sequence(length):
             "speed_in": current_speed,
             "att_in": current_att,
             "axis": current_axis,
-            "is_complex": fig["is_complex"]
+            "is_complex": fig["is_complex"],
+            "has_spin": fig["has_spin"]
         })
 
-        # --- ОБНОВЛЕНИЕ ТЕЛЕМЕТРИИ ДЛЯ СЛЕДУЮЩЕЙ ФИГУРЫ ---
+        # --- ТЕЛЕМЕТРИЯ (Обновляем состояние самолета для следующей фигуры) ---
         if fig["net_flip"]: current_att = "I" if current_att == "U" else "U"
         current_speed = fig["out_speed"]
+        
         if fig["changes_axis"]: current_axis = "Y" if current_axis == "X" else "X"
         if current_axis == "Y": figures_on_y += 1
         else: figures_on_y = 0
+        
         cons_complex = cons_complex + 1 if fig["is_complex"] else 0
 
     return sequence
 
 # --- Streamlit UI ---
 st.set_page_config(page_title="Unlimited Simulator", page_icon="✈️")
-st.title("🏆 Unlimited Simulator (Physics Engine)")
-st.write("Движок трекает Upright/Inverted полет, строго требует сваливание (LS) для штопоров и разбавляет сложные связки простыми разворотами.")
+st.title("🏆 Unlimited Pro (Physics Engine)")
+st.write("Идеальный трекинг перевернутого полета. Штопоры ставятся **только** на скорости сваливания (LS).")
 
 num_figs = st.sidebar.slider("Количество фигур", 5, 15, 10)
 
 if st.button("Сгенерировать комплекс"):
-    complex_data = build_aerodynamic_data_sequence(num_figs)
+    complex_data = build_tournament_sequence(num_figs)
     final_string = " ".join([fig["macro"] for fig in complex_data])
     
     st.success("✅ Готово! Копируй в OpenAero и нажимай **Separate figures**.")
@@ -197,8 +197,10 @@ if st.button("Сгенерировать комплекс"):
     
     st.write("### Телеметрия полета:")
     for i, fig in enumerate(complex_data):
-        att_icon = "⬆️ Пузо" if fig["att_in"] == "U" else "⬇️ Спина"
-        spd_icon = "🔥 HS" if fig["speed_in"] == "HS" else ("💨 MS" if fig["speed_in"] == "MS" else "🛑 LS (Stall)")
+        att_icon = "⬆️ Прямой" if fig["att_in"] == "U" else "⬇️ На спине"
+        spd_icon = "🛑 Сваливание (LS)" if fig["speed_in"] == "LS" else ("🔥 Пикирование (HS)" if fig["speed_in"] == "HS" else "💨 Средняя (MS)")
         cplx_icon = "⚠️ Сложная" if fig["is_complex"] else "✅ Простая"
-        st.write(f"**{i+1}.** `{fig['macro']}`")
+        spin_txt = "🌀 **ШТОПОР!**" if fig["has_spin"] else ""
+        
+        st.write(f"**{i+1}.** `{fig['macro']}` {spin_txt}")
         st.write(f"&nbsp;&nbsp;&nbsp;&nbsp;*Вход:* {att_icon} | {spd_icon} | {cplx_icon}")
