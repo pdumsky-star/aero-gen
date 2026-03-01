@@ -183,11 +183,23 @@ def build_tournament_sequence(length):
             if i >= length - 2:
                 valid_figs = [f for f in valid_figs if not f["changes_axis"]]
 
-        # 4. ПАРАШЮТ СПАСЕНИЯ
+        # 4. ПАРАШЮТ СПАСЕНИЯ (ИСПРАВЛЕНА ОШИБКА UI)
         if not valid_figs:
-            fig = get_y_recovery_figure(current_att, current_speed) if current_axis == "Y" else get_x_recovery_figure(current_att, current_speed)
-            sequence.append(fig)
-            current_att, current_speed, cons_complex = fig["exit_att"], fig["out_speed"], 0
+            rec_data = get_y_recovery_figure(current_att, current_speed) if current_axis == "Y" else get_x_recovery_figure(current_att, current_speed)
+            
+            sequence.append({
+                "macro": rec_data["macro"],
+                "aresti": ", ".join(rec_data["aresti"]),
+                "speed_in": current_speed,
+                "att_in": current_att,
+                "att_out": rec_data["exit_att"],
+                "axis": current_axis,
+                "is_complex": False,
+                "has_spin": False,
+                "has_flick": False
+            })
+            
+            current_att, current_speed, cons_complex = rec_data["exit_att"], rec_data["out_speed"], 0
             if current_axis == "Y":
                 current_axis = "X"
                 figures_since_y = 0
@@ -244,7 +256,7 @@ def build_tournament_sequence(length):
 
 # --- Streamlit UI ---
 st.set_page_config(page_title="Unlimited World Champ", page_icon="🏆")
-st.title("🏆 Unlimited Pro (Anti-Zigzag & Flick Roll Fix)")
+st.title("🏆 Unlimited Pro (Error Fixed)")
 st.write("Скрипт понимает опасность штопорных бочек (Flick Rolls) на высокой скорости. Встроен жесткий **Анти-Зигзаг**, запрещающий уход на ось Y несколько раз подряд.")
 
 num_figs = st.sidebar.slider("Количество фигур", 5, 15, 10)
