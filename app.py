@@ -31,7 +31,7 @@ OPENAERO_DICTIONARY = [
     {"olan": "b",  "name": "Humpty Bump", "slots": [("entry", "vertical"), ("exit", "vertical")]},
     {"olan": "p",  "name": "P-Loop", "slots": [("entry", "vertical"), ("exit", "mandatory_flip")]},
     {"olan": "rp", "name": "Reverse P-Loop", "slots": [("entry", "mandatory_flip"), ("exit", "vertical")]},
-    [cite_start]{"olan": "4jio2", "name": "Rolling Circle", "slots": []} # Берем легитимную связку из твоих файлов [cite: 45]
+    {"olan": "4jio2", "name": "Rolling Circle", "slots": []}
 ]
 
 def get_roll(roll_type):
