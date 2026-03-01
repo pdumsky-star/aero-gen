@@ -12,7 +12,7 @@ def load_database():
         st.stop()
 
 # ==========================================
-# 1. АНАЛИЗАТОР ФИЗИКИ (ULTIMATE MATRIX)
+# 1. АНАЛИЗАТОР ФИЗИКИ (УЛЬТИМАТИВНАЯ МАТРИЦА)
 # ==========================================
 def does_figure_change_axis(aresti_list):
     changes = False
@@ -37,25 +37,48 @@ def analyze_figure(f_data):
     roll_codes = aresti_list[1:]
     has_spin = any(r.split('.')[1] in ['11', '12', '13'] for r in roll_codes if len(r.split('.')) == 4)
 
-    # 1. ИДЕАЛЬНОЕ ЧТЕНИЕ ПОЛОЖЕНИЯ ПО ТЕКСТУ (Никакого угадывания!)
+    # 1. ЖЕСТКОЕ ЧТЕНИЕ ПОЛОЖЕНИЯ ПО МАКРОСУ (+/-)
     m_clean = re.sub(r'[^a-zA-Z0-9\+\-]', '', macro)
     req_entry = 'I' if m_clean.startswith('-') else 'U'
     exit_att = 'I' if m_clean.endswith('-') else 'U'
 
-    # 2. МАТРИЦА СКОРОСТЕЙ (С учетом диагональных Хампти и петель)
+    # 2. МАТРИЦА ВЕКТОРОВ И СКОРОСТЕЙ (Учтена инверсия столбцов!)
     starts_up = False; starts_down = False
     exits_up = False; exits_down = False
 
     if family == 1:
         if sub == 1:
-            if row in [6, 7]:
-                if col in [1, 2]: starts_up = True; exits_up = True
-                if col in [3, 4]: starts_down = True; exits_down = True
-        elif sub in [2, 3, 4]:
-            if row in [1,2,3,4, 9,10,11,12]: starts_up = True
-            if row in [5,6,7,8, 13,14,15,16]: starts_down = True
+            base_up = row in [2, 5, 6]
+            base_down = row in [3, 4, 7]
+            if col in [1, 2]:
+                starts_up = base_up; starts_down = base_down
+                exits_up = base_up; exits_down = base_down
+            else: # В 3 и 4 столбце (push) геометрия инвертируется!
+                starts_up = base_down; starts_down = base_up
+                exits_up = base_down; exits_down = base_up
+        elif sub == 2:
+            base_s_up = row in [1,2,3,4, 9,10,13,14]
+            base_s_down = row in [5,6,7,8, 11,12,15,16]
+            base_e_up = row in [1,2,7,8, 9,12,14,15]
+            base_e_down = row in [3,4,5,6, 10,11,13,16]
+            if col in [1, 2]:
+                starts_up = base_s_up; starts_down = base_s_down
+                exits_up = base_e_up; exits_down = base_e_down
+            else: # Инверсия для сложных линий
+                starts_up = base_s_down; starts_down = base_s_up
+                exits_up = base_e_down; exits_down = base_e_up
+        elif sub in [3, 4]:
+            if col in [1, 2]:
+                starts_up = row in [1,2,3,4, 9,10,11,12]
+                starts_down = row in [5,6,7,8, 13,14,15,16]
+            else:
+                starts_up = row in [5,6,7,8, 13,14,15,16]
+                starts_down = row in [1,2,3,4, 9,10,11,12]
+            exits_down = True
+            
     elif family in [5, 6]:
         starts_up = True; exits_down = True
+        
     elif family == 7:
         if sub in [1, 2]:
             if row in [1, 2]: starts_up = True; exits_up = True
@@ -63,13 +86,16 @@ def analyze_figure(f_data):
         elif sub in [3, 4]:
             if row in [1, 2, 5]: starts_up = True; exits_down = True
             if row in [3, 4, 6]: starts_down = True; exits_up = True
+            
     elif family == 8:
-        if sub in [1, 2, 3, 4, 13, 14]: # Вертикальные Хампти
+        if sub in [1, 2, 3, 4, 13, 14]: # Хампти
             if row in [1, 2, 3, 4]: starts_up = True; exits_down = True
             if row in [5, 6, 7, 8]: starts_down = True; exits_up = True
-        elif sub in [15, 16, 17, 18]: # ДИАГОНАЛЬНЫЕ ХАМПТИ (Исправлено!)
-            if sub in [15, 17]: starts_up = True; exits_down = True
-            if sub in [16, 18]: starts_down = True; exits_up = True
+        elif sub in [15, 16, 17, 18]: # Диагональные Хампти
+            if sub == 15: starts_up = True; exits_down = True
+            if sub == 16: starts_down = True; exits_up = True
+            if sub == 17: starts_up = True; exits_up = True
+            if sub == 18: starts_down = True; exits_down = True
         elif sub in [5, 6]: # Кубинцы и P-петли
             if row in [1, 2, 3, 4]: starts_up = True; exits_down = True
             if row in [5, 6, 7, 8]: starts_down = True; exits_up = True
@@ -77,6 +103,7 @@ def analyze_figure(f_data):
             if row in [1, 2, 3, 4]: starts_up = True; exits_up = True
             if row in [5, 6, 7, 8]: starts_down = True; exits_down = True
 
+    # 3. НАЗНАЧЕНИЕ СКОРОСТЕЙ
     if starts_up: req_speed = 'HS_REQ'
     elif starts_down: req_speed = 'LS_REQ'
     else: req_speed = 'MS_REQ'
@@ -98,30 +125,22 @@ def analyze_figure(f_data):
     }
 
 def is_clean_macro(macro, aresti_list):
-    """Свирепый фильтр. Удаляет битые фигуры из БД, защищая ось Y"""
     m = macro.lower()
     if any(w in m for w in ["sequence", "generated", "unknown", "training", "unlimited", "free", "known"]): return False
     if not aresti_list or len(aresti_list[0].split('.')) < 4: return False
-    
     m_let = re.sub(r'[^a-z]', '', m)
     if not m_let: return False 
-    base = aresti_list[0]
-    if base.startswith("1.1.1.") and len(aresti_list) < 2: return False
+    if aresti_list[0].startswith("1.1.1.") and len(aresti_list) < 2: return False
 
     has_spin = any(r.split('.')[1] in ['11', '12', '13'] for r in aresti_list[1:] if len(r.split('.')) == 4)
     if has_spin and 's' not in m_let and 'f' not in m_let: return False
     if 's' in m_let and not has_spin: return False
 
-    # ЗАЩИТА ОСИ Y: Если в макросе есть вращения, а в Арести их нет - БД битая, удаляем!
-    has_roll_in_macro = bool(re.search(r'[1234568]', m))
-    has_roll_in_aresti = any(a.startswith('9.') for a in aresti_list[1:])
-    if has_roll_in_macro and not has_roll_in_aresti:
-        return False 
-
     return True
 
-# Парашюты безопасности (Используются только при исчерпании базы)
+# Парашюты безопасности
 def get_y_recovery_figure(att, speed):
+    """ЖЕСТКИЙ ВОЗВРАТ НА ОСЬ X. Использует только 100% читаемые фигуры."""
     if speed == 'HS': return {"macro": "-h1-" if att == 'I' else "+h1+", "aresti": ["5.2.1.1", "9.1.5.1"] if att == 'U' else ["5.2.1.2", "9.1.5.1"], "req_speed": "HS_REQ", "out_speed": "HS", "req_entry": att, "exit_att": att, "axis": "Y", "changes_axis": True, "is_complex": False, "has_spin": False, "base_code": "5.2.1.1", "roll_codes": ["9.1.5.1"], "family": 5, "sub": 2}
     elif speed == 'LS': return {"macro": "-v1-" if att == 'I' else "+v1+", "aresti": ["1.1.6.3", "9.1.5.1"] if att == 'U' else ["1.1.6.4", "9.1.5.1"], "req_speed": "LS_REQ", "out_speed": "HS", "req_entry": att, "exit_att": att, "axis": "Y", "changes_axis": True, "is_complex": False, "has_spin": False, "base_code": "1.1.6.3", "roll_codes": ["9.1.5.1"], "family": 1, "sub": 1}
     else: return {"macro": "-1j-" if att == 'I' else "+1j+", "aresti": ["2.1.2.2"] if att == 'I' else ["2.1.2.1"], "req_speed": "MS_REQ", "out_speed": "MS", "req_entry": att, "exit_att": att, "axis": "Y", "changes_axis": True, "is_complex": False, "has_spin": False, "base_code": "2.1.2.1", "roll_codes": [], "family": 2, "sub": 1}
@@ -163,9 +182,9 @@ def build_tournament_sequence(length):
         valid_figs = [f for f in valid_figs if not (current_speed == 'HS' and f["req_speed"] != 'HS_REQ')]
         valid_figs = [f for f in valid_figs if not (current_speed == 'LS' and f["req_speed"] != 'LS_REQ')]
 
-        # 2. ЖЕСТКАЯ ЗАЩИТА ОСИ Y (Только простые и читаемые повороты)
+        # 2. ЖЕСТКАЯ ЗАЩИТА ОСИ Y (Только простые Виражи и Хаммерхеды для возврата)
         if current_axis == "Y":
-            y_figs = [f for f in valid_figs if f["changes_axis"] and not f["is_complex"] and f["family"] in [2, 5, 6]]
+            y_figs = [f for f in valid_figs if f["changes_axis"] and not f["is_complex"] and f["family"] in [2, 5]]
             valid_figs = y_figs
 
         if not valid_figs:
@@ -209,7 +228,6 @@ def build_tournament_sequence(length):
             used_bases.add(fig["base_code"])
             used_rolls.update(fig["roll_codes"])
 
-        # ГЛАВНОЕ ИСПРАВЛЕНИЕ: Точное применение рассчитанного выхода!
         current_att = fig["exit_att"] 
         current_speed = fig["out_speed"]
         if fig["changes_axis"]: current_axis = "Y" if current_axis == "X" else "X"
@@ -220,7 +238,7 @@ def build_tournament_sequence(length):
 # --- Streamlit UI ---
 st.set_page_config(page_title="Unlimited World Champ", page_icon="🏆")
 st.title("🏆 Unlimited Pro (The Ultimate Matrix)")
-st.write("Нативное чтение `+` и `-` для идеальной склейки. Строгая физика петель вниз. Абсолютный запрет на сложные маневры по оси Y.")
+st.write("Безупречный расчет всех инверсий столбцов Арести. Абсолютный запрет на сложные маневры по оси Y (возврат только виражами и хаммерхедами).")
 
 num_figs = st.sidebar.slider("Количество фигур", 5, 15, 10)
 
