@@ -2,108 +2,131 @@ import streamlit as st
 import random
 
 # ==========================================
-# 1. АТОМАРНЫЕ ВРАЩЕНИЯ OLAN (CIVA Valid)
+# 1. CIVA ВРАЩЕНИЯ С УЧЕТОМ СКОРОСТИ
 # ==========================================
-# Вращения, сохраняющие положение (0 или 360 градусов) - взвешены в сторону "без вращения"
-STAY_ROLLS = ["", "", "", "4", "44", "f"] 
+# HS = High Speed (Скорость > 300 км/ч, штопорные нельзя)
+# MS = Medium Speed (Скорость 180-220 км/ч, штопорные разрешены)
 
-# Вращения, меняющие положение (Прямой <-> Перевернутый, 180 градусов)
-FLIP_ROLLS = ["2", "24", "f2", "2,44", "4,2"]
+def get_mandatory_flip(speed):
+    """180° вращения для выхода в прямой полет (U-to-U)"""
+    if speed == "MS":
+        return random.choice(["2", "24", "f2", "2,44"]) # Штопорные разрешены
+    return random.choice(["2", "24", "2,44"]) # Только элеронные на большой скорости
 
-# Вращения для смены оси (Cross-box, 90 или 270 градусов)
-Y_ROLLS = ["1", "3"]
+def get_stay_roll(speed):
+    """Вращения на 360°, сохраняющие прямое положение"""
+    if speed == "MS":
+        return random.choice(["4", "44", "f"]) 
+    return random.choice(["4", "44"])
+
+def get_y_roll():
+    """Смена оси (90° или 270°) на вертикали"""
+    return random.choice(["1", "3", "3f"]) # 3/4 штопорной на вертикали - частая практика
 
 # ==========================================
-# 2. БАЗА ФИГУР С ЖЕСТКИМИ ПРАВИЛАМИ СЛОТОВ
+# 2. ФИЗИКА ФИГУР (ENERGY MANAGEMENT)
 # ==========================================
-# mandatory_flip: Слот, куда ОБЯЗАТЕЛЬНО нужно поставить 180-градусное вращение, чтобы фигура вышла в прямом полете (Upright)
-# vertical: Слот, куда можно поставить 1/4 или 3/4 бочки для ухода на ось Y
-# horizontal: Слот, куда можно ставить только STAY_ROLLS, чтобы не сломать ориентацию
+# in_dir: Требуемый вектор входа (UP, DOWN, HORIZ)
+# out_speed: Скорость на выходе из фигуры
 OPENAERO_DICTIONARY = [
-    {"olan": "o",  "name": "Петля", "slots": [("top", "horizontal")]},
-    {"olan": "m",  "name": "Immelmann (Полупетля вверх)", "slots": [("exit", "mandatory_flip")]},
-    {"olan": "a",  "name": "Split-S (Переворот)", "slots": [("entry", "mandatory_flip")]},
-    {"olan": "c",  "name": "Half Cuban", "slots": [("exit", "mandatory_flip")]},
-    {"olan": "rc", "name": "Reverse Cuban", "slots": [("entry", "mandatory_flip")]},
-    {"olan": "j",  "name": "Вираж 180", "slots": []},
-    {"olan": "ta", "name": "Прямой колокол", "slots": [("entry", "vertical"), ("exit", "vertical")]},
-    {"olan": "h",  "name": "Хаммерхед", "slots": [("entry", "vertical"), ("exit", "vertical")]},
-    {"olan": "b",  "name": "Humpty Bump", "slots": [("entry", "vertical"), ("exit", "vertical")]},
-    {"olan": "p",  "name": "P-Loop", "slots": [("entry", "vertical"), ("exit", "mandatory_flip")]},
-    {"olan": "rp", "name": "Reverse P-Loop", "slots": [("entry", "mandatory_flip"), ("exit", "vertical")]},
-    {"olan": "4jio2", "name": "Rolling Circle", "slots": []}
+    {"olan": "o",  "name": "Петля", "in_dir": "UP", "out_speed": "HS", "slots": [("top", "horizontal")]},
+    {"olan": "m",  "name": "Иммельман", "in_dir": "UP", "out_speed": "MS", "slots": [("exit", "mandatory_flip")]},
+    {"olan": "a",  "name": "Split-S (Переворот)", "in_dir": "DOWN", "out_speed": "HS", "slots": [("entry", "mandatory_flip")]},
+    {"olan": "c",  "name": "Half Cuban", "in_dir": "UP", "out_speed": "HS", "slots": [("exit", "mandatory_flip")]},
+    {"olan": "rc", "name": "Reverse Cuban", "in_dir": "UP", "out_speed": "HS", "slots": [("entry", "mandatory_flip")]},
+    {"olan": "ta", "name": "Прямой колокол", "in_dir": "UP", "out_speed": "HS", "slots": [("entry", "vertical"), ("exit", "vertical")]},
+    {"olan": "h",  "name": "Хаммерхед", "in_dir": "UP", "out_speed": "HS", "slots": [("entry", "vertical"), ("exit", "vertical")]},
+    {"olan": "b",  "name": "Humpty Bump", "in_dir": "UP", "out_speed": "HS", "slots": [("entry", "vertical"), ("exit", "vertical")]},
+    {"olan": "j",  "name": "Вираж 180", "in_dir": "HORIZ", "out_speed": "MS", "slots": []},
+    {"olan": "4jio2", "name": "Rolling Circle (1 круг)", "in_dir": "HORIZ", "out_speed": "MS", "slots": []}
 ]
 
-def get_roll(roll_type):
-    if roll_type == "STAY": return random.choice(STAY_ROLLS)
-    elif roll_type == "FLIP": return random.choice(FLIP_ROLLS)
-    elif roll_type == "Y": return random.choice(Y_ROLLS)
-    return ""
-
-def build_bulletproof_sequence(length):
+def build_aerodynamic_sequence(length):
     sequence = []
-    axis = 'X' # Всегда начинаем по главной оси
+    
+    # Стартовые условия
+    current_speed = "MS" 
+    current_axis = "X"
+    figures_on_y = 0
     
     for i in range(length):
-        fig = random.choice(OPENAERO_DICTIONARY)
-        
-        # 1. Проверяем, нужны ли манипуляции с осью Y
-        has_vertical = any(slot_type == "vertical" for _, slot_type in fig["slots"])
-        need_axis_change = False
-        
-        if has_vertical:
-            if axis == 'Y' and i >= length - 2:
-                # Если скоро конец, принудительно возвращаемся на X
-                need_axis_change = True
-            elif axis == 'X' and random.random() < 0.2:
-                need_axis_change = True
-            elif axis == 'Y' and random.random() < 0.4:
-                need_axis_change = True
-
+        valid_figs = []
+        for fig in OPENAERO_DICTIONARY:
+            # ПРАВИЛО 1: Управление энергией (Скорость)
+            # После разгона (HS) можно лететь только ВВЕРХ (UP)
+            if current_speed == "HS" and fig["in_dir"] != "UP":
+                continue
+                
+            # ПРАВИЛО 2: Контроль поперечной оси (Cross-box)
+            # Нельзя зависать на оси Y дольше одной фигуры. 
+            has_vertical = any(t == "vertical" for _, t in fig["slots"])
+            if current_axis == "Y" and figures_on_y >= 1 and not has_vertical:
+                continue # Принудительно заставляем взять фигуру с вертикалью для возврата
+                
+            valid_figs.append(fig)
+            
+        fig = random.choice(valid_figs)
         rolls = {"entry": "", "top": "", "exit": ""}
-        axis_changed_this_fig = False
         
-        # 2. Раздаем вращения строго по правилам слотов
+        has_vertical = any(t == "vertical" for _, t in fig["slots"])
+        need_return_to_x = (current_axis == "Y" and has_vertical)
+        go_to_y = (current_axis == "X" and has_vertical and random.random() < 0.25 and i < length - 2)
+        axis_changed = False
+        
+        # Расставляем бочки
         for slot_pos, slot_type in fig["slots"]:
             if slot_type == "mandatory_flip":
-                rolls[slot_pos] = get_roll("FLIP")
+                rolls[slot_pos] = get_mandatory_flip(current_speed)
+                
             elif slot_type == "horizontal":
-                if random.random() < 0.4:
-                    rolls[slot_pos] = get_roll("STAY")
-            elif slot_type == "vertical":
-                # Если нужна смена оси, ставим 90/270 градусов на первую попавшуюся вертикаль
-                if need_axis_change and not axis_changed_this_fig:
-                    rolls[slot_pos] = get_roll("Y")
-                    axis_changed_this_fig = True
-                    axis = 'Y' if axis == 'X' else 'X'
-                elif random.random() < 0.4:
-                    rolls[slot_pos] = get_roll("STAY")
+                if random.random() < 0.3:
+                    rolls[slot_pos] = get_stay_roll(current_speed)
                     
-        # 3. Собираем макрос
+            elif slot_type == "vertical":
+                # Обработка ухода/возврата на ось Y
+                if (need_return_to_x or go_to_y) and not axis_changed:
+                    rolls[slot_pos] = get_y_roll()
+                    axis_changed = True
+                    current_axis = "X" if current_axis == "Y" else "Y"
+                    if current_axis == "X":
+                        figures_on_y = 0
+                else:
+                    if random.random() < 0.3:
+                        rolls[slot_pos] = random.choice(["4", "44"]) # 360-бочка на вертикали
+                        
         macro = f"{rolls.get('entry', '')}{fig['olan']}{rolls.get('top', '')}{rolls.get('exit', '')}"
-        sequence.append({"macro": macro, "desc": fig["name"], "axis": axis})
         
-    # Failsafe: Если комплекс случайно закончился на оси Y, добавляем корректирующую фигуру
-    if axis == 'Y':
-        sequence.append({"macro": "1h", "desc": "Хаммерхед (Принудительный возврат на ось X)", "axis": 'X'})
+        sequence.append({
+            "macro": macro, 
+            "desc": fig["name"], 
+            "speed_in": current_speed,
+            "axis": current_axis
+        })
+        
+        # Обновляем состояния
+        current_speed = fig["out_speed"]
+        if current_axis == "Y":
+            figures_on_y += 1
+            
+    # Failsafe: принудительный возврат, если комплекс прервался на оси Y
+    if current_axis == "Y":
+        sequence.append({"macro": "1h", "desc": "Хаммерхед (Возврат на ось X)", "speed_in": "HS", "axis": "X"})
         
     return sequence
 
 # --- Streamlit UI ---
-st.set_page_config(page_title="Unlimited OLAN PRO", page_icon="🛩️")
-st.title("🏆 Валидный OLAN Генератор (U-to-U Logic)")
-st.write("Скрипт использует строгую логику U-to-U (Upright to Upright), гарантируя обязательные полубочки для фигур, меняющих положение самолета.")
+st.set_page_config(page_title="Aero Gen Unlimited", page_icon="🛩️")
+st.title("🏆 Аэродинамический OLAN Генератор")
+st.write("Теперь генератор отслеживает управление энергией (Скорость) и жестко контролирует ось Y.")
 
 num_figs = st.sidebar.slider("Количество фигур", 5, 20, 10)
 
 if st.button("Сгенерировать комплекс"):
-    complex_data = build_bulletproof_sequence(num_figs)
+    complex_data = build_aerodynamic_sequence(num_figs)
     final_string = " ".join([fig["macro"] for fig in complex_data])
     
-    st.success("✅ Готово! Скопируй строку, вставь в OpenAero и нажми кнопку **Separate figures**.")
+    st.success("✅ Готово! Копируй строку, вставляй в OpenAero и нажимай **Separate figures**.")
     st.code(final_string, language="text")
     
-    st.write("### Логика полета:")
-    for i, fig in enumerate(complex_data):
-        axis_icon = "🔵 X" if fig["axis"] == "X" else "🔴 Y"
-        st.write(f"**{i+1}.** `{fig['macro']}` — {fig['desc']} *(Ось: {axis_icon})*")
+    st.write("### Телеметрия комплекса:")
+    for i, fig in enumerate(complex_
