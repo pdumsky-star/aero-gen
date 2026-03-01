@@ -85,5 +85,3 @@ if st.button("Сгенерировать комплекс"):
     st.write("### Состав комплекса:")
     for i, fig in enumerate(complex_data):
         st.write(f"**{i+1}.** `{fig['macro']}` — {fig['desc']}")
-except FileNotFoundError:
-    st.error("Ошибка: Файл catalog.json не найден!")
