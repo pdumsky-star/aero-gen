@@ -51,7 +51,6 @@ def analyze_figure(f_data):
     exits_up = False; exits_down = False
 
     if family == 1:
-        # Для прямых линий читаем геометрию прямо из текста, это надежнее
         is_down = any(x in m_clean for x in ['iv', 'it', 'k', 'ik'])
         is_up = any(x in m_clean for x in ['v', 't', 'p']) and not is_down
         if is_down: starts_down = True; exits_down = True
@@ -84,7 +83,7 @@ def analyze_figure(f_data):
             if row in [1, 2, 3, 4]: starts_up = True; exits_up = True
             if row in [5, 6, 7, 8]: starts_down = True; exits_down = True
 
-    # 3. ФИЗИКА ЭНЕРГИИ (С учетом Штопорных Бочек)
+    # 3. ФИЗИКА ЭНЕРГИИ 
     if starts_up: req_speed = 'HS_REQ'
     elif starts_down: req_speed = 'LS_REQ'
     else: req_speed = 'MS_REQ'
@@ -93,11 +92,8 @@ def analyze_figure(f_data):
     elif exits_down: out_speed = 'HS'
     else: out_speed = 'MS'
 
-    # ЗАЩИТА: Штопоры и штопорные бочки
-    if has_spin: 
-        req_speed = 'LS_REQ'
-    elif has_flick and req_speed == 'HS_REQ':
-        req_speed = 'MS_REQ' # Запрет на штопорную бочку из крутого пикирования!
+    if has_spin: req_speed = 'LS_REQ'
+    elif has_flick and req_speed == 'HS_REQ': req_speed = 'MS_REQ' 
 
     changes_axis = does_figure_change_axis(aresti_list)
     is_complex = len(aresti_list) >= 3
@@ -118,19 +114,27 @@ def is_clean_macro(macro, aresti_list):
     if aresti_list[0].startswith("1.1.1.") and len(aresti_list) < 2: return False
     return True
 
-# ПАРАШЮТЫ С ИДЕАЛЬНЫМИ ОСЯМИ
+# ==========================================
+# 2. ИДЕАЛЬНЫЕ ПАРАШЮТЫ С УЧЕТОМ НОВОГО OLAN СИНТАКСИСА
+# ==========================================
 def get_y_recovery_figure(att, speed):
-    if speed == 'HS': return {"macro": "-h1-" if att == 'I' else "+h1+", "aresti": ["5.2.1.1", "9.1.5.1"] if att == 'U' else ["5.2.1.2", "9.1.5.1"], "req_speed": "HS_REQ", "out_speed": "HS", "req_entry": att, "exit_att": att, "axis": "Y", "changes_axis": True, "is_complex": False, "has_spin": False, "base_code": "5.2.1.1", "roll_codes": ["9.1.5.1"], "family": 5, "sub": 2}
-    elif speed == 'LS': return {"macro": "-v1-" if att == 'I' else "+v1+", "aresti": ["1.1.6.3", "9.1.5.1"] if att == 'U' else ["1.1.6.4", "9.1.5.1"], "req_speed": "LS_REQ", "out_speed": "HS", "req_entry": att, "exit_att": att, "axis": "Y", "changes_axis": True, "is_complex": False, "has_spin": False, "base_code": "1.1.6.3", "roll_codes": ["9.1.5.1"], "family": 1, "sub": 1}
-    else: return {"macro": "-1j-" if att == 'I' else "+1j+", "aresti": ["2.1.1.2"] if att == 'I' else ["2.1.1.1"], "req_speed": "MS_REQ", "out_speed": "MS", "req_entry": att, "exit_att": att, "axis": "Y", "changes_axis": True, "is_complex": False, "has_spin": False, "base_code": "2.1.1.1", "roll_codes": [], "family": 2, "sub": 1}
+    # h4 - Хаммерхед с 1/4 бочки вниз
+    if speed == 'HS': 
+        return {"macro": "-h4-" if att == 'I' else "+h4+", "aresti": ["5.2.1.2", "9.1.5.1"] if att == 'I' else ["5.2.1.1", "9.1.5.1"], "req_speed": "HS_REQ", "out_speed": "HS", "req_entry": att, "exit_att": att, "axis": "Y", "changes_axis": True, "is_complex": False, "has_spin": False, "has_flick": False, "base_code": "5.2.1.1", "roll_codes": ["9.1.5.1"], "family": 5, "sub": 2}
+    # iv4 - Вертикаль вниз с 1/4 бочки
+    elif speed == 'LS': 
+        return {"macro": "-iv4-" if att == 'I' else "+iv4+", "aresti": ["1.1.6.4", "9.1.5.1"] if att == 'I' else ["1.1.6.3", "9.1.5.1"], "req_speed": "LS_REQ", "out_speed": "HS", "req_entry": att, "exit_att": att, "axis": "Y", "changes_axis": True, "is_complex": False, "has_spin": False, "has_flick": False, "base_code": "1.1.6.3", "roll_codes": ["9.1.5.1"], "family": 1, "sub": 1}
+    # 1j - Вираж 90 градусов
+    else: 
+        return {"macro": "-1j-" if att == 'I' else "+1j+", "aresti": ["2.1.1.2"] if att == 'I' else ["2.1.1.1"], "req_speed": "MS_REQ", "out_speed": "MS", "req_entry": att, "exit_att": att, "axis": "Y", "changes_axis": True, "is_complex": False, "has_spin": False, "has_flick": False, "base_code": "2.1.1.1", "roll_codes": [], "family": 2, "sub": 1}
 
 def get_x_recovery_figure(att, speed):
-    if speed == 'HS': return {"macro": "-o-" if att == 'I' else "+o+", "aresti": ["7.4.2.1"] if att == 'I' else ["7.4.1.1"], "req_speed": "HS_REQ", "out_speed": "HS", "req_entry": att, "exit_att": att, "axis": "X", "changes_axis": False, "is_complex": False, "has_spin": False, "base_code": "7.4.1.1", "roll_codes": [], "family": 7, "sub": 4}
-    elif speed == 'LS': return {"macro": "-a+" if att == 'I' else "+2a+", "aresti": ["7.2.3.3"] if att == 'I' else ["7.2.3.3", "9.1.3.2"], "req_speed": "LS_REQ", "out_speed": "HS", "req_entry": att, "exit_att": "U", "axis": "X", "changes_axis": False, "is_complex": False, "has_spin": False, "base_code": "7.2.3.3", "roll_codes": [], "family": 7, "sub": 2}
-    else: return {"macro": "-j-" if att == 'I' else "+j+", "aresti": ["2.2.1.2"] if att == 'I' else ["2.2.1.1"], "req_speed": "MS_REQ", "out_speed": "MS", "req_entry": att, "exit_att": att, "axis": "X", "changes_axis": False, "is_complex": False, "has_spin": False, "base_code": "2.2.1.1", "roll_codes": [], "family": 2, "sub": 2}
+    if speed == 'HS': return {"macro": "-o-" if att == 'I' else "+o+", "aresti": ["7.4.2.1"] if att == 'I' else ["7.4.1.1"], "req_speed": "HS_REQ", "out_speed": "HS", "req_entry": att, "exit_att": att, "axis": "X", "changes_axis": False, "is_complex": False, "has_spin": False, "has_flick": False, "base_code": "7.4.1.1", "roll_codes": [], "family": 7, "sub": 4}
+    elif speed == 'LS': return {"macro": "-a+" if att == 'I' else "+2a+", "aresti": ["7.2.3.3"] if att == 'I' else ["7.2.3.3", "9.1.3.2"], "req_speed": "LS_REQ", "out_speed": "HS", "req_entry": att, "exit_att": "U", "axis": "X", "changes_axis": False, "is_complex": False, "has_spin": False, "has_flick": False, "base_code": "7.2.3.3", "roll_codes": [], "family": 7, "sub": 2}
+    else: return {"macro": "-j-" if att == 'I' else "+j+", "aresti": ["2.2.1.2"] if att == 'I' else ["2.2.1.1"], "req_speed": "MS_REQ", "out_speed": "MS", "req_entry": att, "exit_att": att, "axis": "X", "changes_axis": False, "is_complex": False, "has_spin": False, "has_flick": False, "base_code": "2.2.1.1", "roll_codes": [], "family": 2, "sub": 2}
 
 # ==========================================
-# 2. ГЕНЕРАТОР КОМПЛЕКСОВ
+# 3. ГЕНЕРАТОР КОМПЛЕКСОВ
 # ==========================================
 DATABASE = load_database()
 
@@ -140,7 +144,7 @@ def build_tournament_sequence(length):
     current_speed = "MS"  
     current_axis = "X"    
     cons_complex = 0   
-    figures_since_y = 99  # ТАЙМЕР АНТИ-ЗИГЗАГА
+    figures_since_y = 99  
     
     used_bases = set()
     used_rolls = set()
@@ -176,14 +180,12 @@ def build_tournament_sequence(length):
             y_figs = [f for f in valid_figs if f["changes_axis"] and not f["is_complex"] and f["family"] in [1, 2, 5]]
             valid_figs = y_figs
         else:
-            # АНТИ-ЗИГЗАГ: Запрещаем уходить на Y, если только что оттуда вернулись
             if figures_since_y < 2:
                 valid_figs = [f for f in valid_figs if not f["changes_axis"]]
-            # Запрещаем уходить на Y в самом конце
             if i >= length - 2:
                 valid_figs = [f for f in valid_figs if not f["changes_axis"]]
 
-        # 4. ПАРАШЮТ СПАСЕНИЯ (ИСПРАВЛЕНА ОШИБКА UI)
+        # 4. ПАРАШЮТ СПАСЕНИЯ
         if not valid_figs:
             rec_data = get_y_recovery_figure(current_att, current_speed) if current_axis == "Y" else get_x_recovery_figure(current_att, current_speed)
             
@@ -241,7 +243,6 @@ def build_tournament_sequence(length):
             used_bases.add(fig["base_code"])
             used_rolls.update(fig["roll_codes"])
 
-        # ОБНОВЛЕНИЕ ТЕЛЕМЕТРИИ
         current_att = fig["exit_att"] 
         current_speed = fig["out_speed"]
         cons_complex = cons_complex + 1 if fig["is_complex"] else 0
@@ -256,8 +257,8 @@ def build_tournament_sequence(length):
 
 # --- Streamlit UI ---
 st.set_page_config(page_title="Unlimited World Champ", page_icon="🏆")
-st.title("🏆 Unlimited Pro (Error Fixed)")
-st.write("Скрипт понимает опасность штопорных бочек (Flick Rolls) на высокой скорости. Встроен жесткий **Анти-Зигзаг**, запрещающий уход на ось Y несколько раз подряд.")
+st.title("🏆 Unlimited Pro (True OLAN Syntax)")
+st.write("Скрипт использует правильные OLAN макросы (`h4`, `iv4`) для гарантированного возврата с поперечной оси.")
 
 num_figs = st.sidebar.slider("Количество фигур", 5, 15, 10)
 
@@ -279,4 +280,4 @@ if st.button("Сгенерировать комплекс"):
         elif fig.get("has_flick"): spin_txt = "⚡ **ШТОПОРНАЯ БОЧКА**"
         
         st.write(f"**{i+1}.** `{fig['macro']}` {spin_txt}")
-        st.write(f"&nbsp;&nbsp;&nbsp;&nbsp;*Вход:* {att_in} ({spd_icon}) ➡️ *Выход:* {att_out} | *Арести:* {fig.get('aresti', 'N/A')}")
+        st.write(f"&nbsp;&nbsp;&nbsp;&nbsp;*Вход:* {att_in} ({spd_icon}) ➡️ *Выход:* {att_out} | *Ось:* {fig['axis']}")
