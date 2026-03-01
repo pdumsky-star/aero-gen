@@ -53,7 +53,7 @@ def analyze_figure(f_data):
     has_spin = any(r.split('.')[1] in ['11', '12', '13'] for r in roll_codes if len(r.split('.')) == 4)
     has_flick = any(r.split('.')[1] in ['9', '10'] for r in roll_codes if len(r.split('.')) == 4)
 
-    # 1. ГИБРИДНЫЙ ПАРСЕР ПОЛОЖЕНИЯ (Устранение "autocorrect roll")
+    # 1. ГИБРИДНЫЙ ПАРСЕР ПОЛОЖЕНИЯ
     m_clean = re.sub(r'[^a-z0-9\+\-]', '', macro)
     
     explicit_entry = 'I' if m_clean.startswith('-') else ('U' if m_clean.startswith('+') else None)
@@ -135,17 +135,17 @@ def is_clean_macro(macro, aresti_list):
     return True
 
 # ==========================================
-# 2. ПАРАШЮТЫ С ИДЕАЛЬНЫМ OLAN СИНТАКСИСОМ
+# 2. ПАРАШЮТЫ
 # ==========================================
 def get_y_recovery_figure(att, speed):
-    if speed == 'HS': return {"macro": "-h4-" if att == 'I' else "+h4+", "aresti": ["5.2.1.2", "9.1.5.1"] if att == 'I' else ["5.2.1.1", "9.1.5.1"], "starts_dir": "UP", "out_speed": "HS", "req_entry": att, "exit_att": att, "axis": "Y", "changes_axis": True, "is_complex": False, "has_spin": False, "has_flick": False, "base_code": "5.2.1.1"}
-    elif speed == 'LS': return {"macro": "-iv4-" if att == 'I' else "+iv4+", "aresti": ["1.1.6.4", "9.1.5.1"] if att == 'I' else ["1.1.6.3", "9.1.5.1"], "starts_dir": "DOWN", "out_speed": "HS", "req_entry": att, "exit_att": att, "axis": "Y", "changes_axis": True, "is_complex": False, "has_spin": False, "has_flick": False, "base_code": "1.1.6.3"}
-    else: return {"macro": "-1j-" if att == 'I' else "+1j+", "aresti": ["2.1.1.2"] if att == 'I' else ["2.1.1.1"], "starts_dir": "HORIZ", "out_speed": "MS", "req_entry": att, "exit_att": att, "axis": "Y", "changes_axis": True, "is_complex": False, "has_spin": False, "has_flick": False, "base_code": "2.1.1.1"}
+    if speed == 'HS': return {"macro": "-h4-" if att == 'I' else "+h4+", "aresti": ["5.2.1.2", "9.1.5.1"] if att == 'I' else ["5.2.1.1", "9.1.5.1"], "starts_dir": "UP", "out_speed": "HS", "req_entry": att, "exit_att": att, "axis": "Y", "changes_axis": True, "is_complex": False, "has_spin": False, "has_flick": False, "base_code": "5.2.1.1", "roll_codes": ["9.1.5.1"], "family": 5, "sub": 2}
+    elif speed == 'LS': return {"macro": "-iv4-" if att == 'I' else "+iv4+", "aresti": ["1.1.6.4", "9.1.5.1"] if att == 'I' else ["1.1.6.3", "9.1.5.1"], "starts_dir": "DOWN", "out_speed": "HS", "req_entry": att, "exit_att": att, "axis": "Y", "changes_axis": True, "is_complex": False, "has_spin": False, "has_flick": False, "base_code": "1.1.6.3", "roll_codes": ["9.1.5.1"], "family": 1, "sub": 1}
+    else: return {"macro": "-1j-" if att == 'I' else "+1j+", "aresti": ["2.1.1.2"] if att == 'I' else ["2.1.1.1"], "starts_dir": "HORIZ", "out_speed": "MS", "req_entry": att, "exit_att": att, "axis": "Y", "changes_axis": True, "is_complex": False, "has_spin": False, "has_flick": False, "base_code": "2.1.1.1", "roll_codes": [], "family": 2, "sub": 1}
 
 def get_x_recovery_figure(att, speed):
-    if speed == 'HS': return {"macro": "-o-" if att == 'I' else "+o+", "aresti": ["7.4.2.1"] if att == 'I' else ["7.4.1.1"], "starts_dir": "UP", "out_speed": "HS", "req_entry": att, "exit_att": att, "axis": "X", "changes_axis": False, "is_complex": False, "has_spin": False, "has_flick": False, "base_code": "7.4.1.1"}
-    elif speed == 'LS': return {"macro": "-a+" if att == 'I' else "+2a+", "aresti": ["7.2.3.3"] if att == 'I' else ["7.2.3.3", "9.1.3.2"], "starts_dir": "DOWN", "out_speed": "HS", "req_entry": att, "exit_att": "U", "axis": "X", "changes_axis": False, "is_complex": False, "has_spin": False, "has_flick": False, "base_code": "7.2.3.3"}
-    else: return {"macro": "-j-" if att == 'I' else "+j+", "aresti": ["2.2.1.2"] if att == 'I' else ["2.2.1.1"], "starts_dir": "HORIZ", "out_speed": "MS", "req_entry": att, "exit_att": att, "axis": "X", "changes_axis": False, "is_complex": False, "has_spin": False, "has_flick": False, "base_code": "2.2.1.1"}
+    if speed == 'HS': return {"macro": "-o-" if att == 'I' else "+o+", "aresti": ["7.4.2.1"] if att == 'I' else ["7.4.1.1"], "starts_dir": "UP", "out_speed": "HS", "req_entry": att, "exit_att": att, "axis": "X", "changes_axis": False, "is_complex": False, "has_spin": False, "has_flick": False, "base_code": "7.4.1.1", "roll_codes": [], "family": 7, "sub": 4}
+    elif speed == 'LS': return {"macro": "-a+" if att == 'I' else "+2a+", "aresti": ["7.2.3.3"] if att == 'I' else ["7.2.3.3", "9.1.3.2"], "starts_dir": "DOWN", "out_speed": "HS", "req_entry": att, "exit_att": "U", "axis": "X", "changes_axis": False, "is_complex": False, "has_spin": False, "has_flick": False, "base_code": "7.2.3.3", "roll_codes": [], "family": 7, "sub": 2}
+    else: return {"macro": "-j-" if att == 'I' else "+j+", "aresti": ["2.2.1.2"] if att == 'I' else ["2.2.1.1"], "starts_dir": "HORIZ", "out_speed": "MS", "req_entry": att, "exit_att": att, "axis": "X", "changes_axis": False, "is_complex": False, "has_spin": False, "has_flick": False, "base_code": "2.2.1.1", "roll_codes": [], "family": 2, "sub": 2}
 
 # ==========================================
 # 3. ГЕНЕРАТОР КОМПЛЕКСОВ
@@ -179,7 +179,18 @@ def build_tournament_sequence(length):
     for i in range(length):
         if current_axis == "Y":
             fig = get_y_recovery_figure(current_att, current_speed)
-            sequence.append(fig)
+            sequence.append({
+                "macro": fig["macro"],
+                "aresti": ", ".join(fig["aresti"]),
+                "speed_in": current_speed,
+                "att_in": current_att,
+                "att_out": fig["exit_att"],
+                "starts_dir": fig["starts_dir"],
+                "axis": "Y",
+                "is_complex": False,
+                "has_spin": False,
+                "has_flick": False
+            })
             current_att, current_speed, cons_complex = fig["exit_att"], fig["out_speed"], 0
             current_axis = "X"
             figures_since_y = 0
@@ -187,16 +198,12 @@ def build_tournament_sequence(length):
 
         valid_figs = [f for f in clean_pool if f["req_entry"] == current_att]
         
-        # --- ИСПРАВЛЕННЫЙ ЖЕСТКИЙ КОНТРОЛЬ СКОРОСТИ ---
         speed_filtered = []
         for f in valid_figs:
             sd = f["starts_dir"]
-            
             if current_speed == 'HS' and f["has_flick"]: continue
-            
             if current_speed == 'LS' and sd in ['DOWN', 'SPIN']: speed_filtered.append(f)
             elif current_speed == 'HS' and sd in ['UP', 'HORIZ']: speed_filtered.append(f)
-            # ГЛАВНОЕ ИСПРАВЛЕНИЕ: Из MS (крейсер) можно только нырять вниз (за скоростью) или делать плоские фигуры!
             elif current_speed == 'MS' and sd in ['DOWN', 'HORIZ']: speed_filtered.append(f)
             
         valid_figs = speed_filtered
@@ -206,7 +213,18 @@ def build_tournament_sequence(length):
 
         if not valid_figs:
             fig = get_x_recovery_figure(current_att, current_speed)
-            sequence.append(fig)
+            sequence.append({
+                "macro": fig["macro"],
+                "aresti": ", ".join(fig["aresti"]),
+                "speed_in": current_speed,
+                "att_in": current_att,
+                "att_out": fig["exit_att"],
+                "starts_dir": fig["starts_dir"],
+                "axis": "X",
+                "is_complex": False,
+                "has_spin": False,
+                "has_flick": False
+            })
             current_att, current_speed, cons_complex = fig["exit_att"], fig["out_speed"], 0
             figures_since_y += 1
             continue
@@ -222,7 +240,19 @@ def build_tournament_sequence(length):
                 if f2: fig = random.choice(f2)
                 else: fig = random.choice(valid_figs)
 
-        sequence.append(fig)
+        # 5. НАСТОЯЩАЯ УПАКОВКА ФИГУРЫ В ИНТЕРФЕЙС (ОШИБКА ИСПРАВЛЕНА!)
+        sequence.append({
+            "macro": fig["macro"],
+            "aresti": ", ".join(fig["aresti"]) if isinstance(fig["aresti"], list) else fig["aresti"],
+            "speed_in": current_speed,
+            "att_in": current_att,
+            "att_out": fig["exit_att"],
+            "starts_dir": fig["starts_dir"],
+            "axis": current_axis,
+            "is_complex": fig["is_complex"],
+            "has_spin": fig["has_spin"],
+            "has_flick": fig["has_flick"]
+        })
 
         if "base_code" in fig:
             used_bases.add(fig["base_code"])
@@ -242,8 +272,8 @@ def build_tournament_sequence(length):
 
 # --- Streamlit UI ---
 st.set_page_config(page_title="Unlimited World Champ", page_icon="🏆")
-st.title("🏆 Unlimited Pro (Perfect Physics & Axis)")
-st.write("Возвращен Гибридный Парсер для устранения автокоррекций OpenAero. Идеальный трекинг 3/4 штопорных бочек и строгий запрет ухода из крейсера (MS) в вертикаль (UP).")
+st.title("🏆 Unlimited Pro (Error Free)")
+st.write("Скрипт идеально соблюдает законы кинетической энергии. Из `LS` (сваливания) самолет может пойти **только вниз** или в штопор. Из `HS` (разгона) — **только вверх** или в горизонт.")
 
 num_figs = st.sidebar.slider("Количество фигур", 5, 15, 10)
 
