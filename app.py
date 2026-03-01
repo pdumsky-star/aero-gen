@@ -12,7 +12,7 @@ def load_database():
         st.stop()
 
 # ==========================================
-# 1. АНАЛИЗАТОР ФИЗИКИ И СТРОГАЯ МАТРИЦА АРЕСТИ
+# 1. АНАЛИЗАТОР ФИЗИКИ (AERODYNAMIC PRO)
 # ==========================================
 def does_figure_change_axis(aresti_list):
     changes = False
@@ -22,30 +22,27 @@ def does_figure_change_axis(aresti_list):
             family = int(parts[0])
             sub = int(parts[1])
             col = int(parts[3])
-
-            # ИСПРАВЛЕНО: Для виражей (Сем. 2) угол зашит в sub! 1=90°, 3=270°. Они меняют ось.
-            if family == 2 and sub in [1, 3]:
-                changes = not changes 
-            # ИСПРАВЛЕНО: Любое нечетное вращение (1/4, 3/4, 1.25) меняет ось.
-            elif family == 9 and col % 2 != 0:
-                changes = not changes
+            # Виражи (1=90°, 3=270°)
+            if family == 2 and sub in [1, 3]: changes = not changes 
+            # Нечетные бочки на вертикалях (1/4, 3/4)
+            elif family == 9 and col % 2 != 0: changes = not changes
     return changes
 
 def analyze_figure(f_data):
     aresti_list = f_data["aresti"]
-    macro = f_data["macro"]
+    macro = f_data["macro"].lower()
     base = aresti_list[0]
     parts = base.split('.')
     family = int(parts[0])
     sub = int(parts[1]) if len(parts) > 1 else 0
     row = int(parts[2]) if len(parts) > 2 else 0
-    col = int(parts[3]) if len(parts) > 3 else 0
 
     roll_codes = aresti_list[1:]
     has_spin = any(r.split('.')[1] in ['11', '12', '13'] for r in roll_codes if len(r.split('.')) == 4)
+    has_flick = any(r.split('.')[1] in ['9', '10'] for r in roll_codes if len(r.split('.')) == 4)
 
-    # 1. ЖЕСТКОЕ ЧТЕНИЕ ПОЛОЖЕНИЯ ПО ТЕКСТУ (Идеальная склейка)
-    m_clean = re.sub(r'[^a-zA-Z0-9\+\-]', '', macro)
+    # 1. ЧТЕНИЕ ПОЛОЖЕНИЯ ПО МАКРОСУ (+/-)
+    m_clean = re.sub(r'[^a-z0-9\+\-]', '', macro)
     req_entry = 'I' if m_clean.startswith('-') else 'U'
     exit_att = 'I' if m_clean.endswith('-') else 'U'
 
@@ -54,24 +51,16 @@ def analyze_figure(f_data):
     exits_up = False; exits_down = False
 
     if family == 1:
-        if sub == 1: # Простые линии (ИСПРАВЛЕНО)
-            if row in [6, 7]:
-                if col in [1, 2]: starts_up = True; exits_up = True
-                if col in [3, 4]: starts_down = True; exits_down = True
-        elif sub == 2:
-            if row in [1,2,3,4, 9,10,13,14]: starts_up = True
-            if row in [5,6,7,8, 11,12,15,16]: starts_down = True
-            if row in [1,2,7,8, 9,12,14,15]: exits_up = True
-            if row in [3,4,5,6, 10,11,13,16]: exits_down = True
-        elif sub in [3, 4]:
-            if row in [1,2,3,4, 9,10,11,12]: starts_up = True
-            if row in [5,6,7,8, 13,14,15,16]: starts_down = True
-            exits_down = True
+        # Для прямых линий читаем геометрию прямо из текста, это надежнее
+        is_down = any(x in m_clean for x in ['iv', 'it', 'k', 'ik'])
+        is_up = any(x in m_clean for x in ['v', 't', 'p']) and not is_down
+        if is_down: starts_down = True; exits_down = True
+        elif is_up: starts_up = True; exits_up = True
             
-    elif family in [5, 6]:
+    elif family in [5, 6]: # Хаммерхеды и Колокола
         starts_up = True; exits_down = True
         
-    elif family == 7:
+    elif family == 7: # Петли и полупетли
         if sub in [1, 2]:
             if row in [1, 2]: starts_up = True; exits_up = True
             if row in [3, 4]: starts_down = True; exits_down = True
@@ -95,7 +84,7 @@ def analyze_figure(f_data):
             if row in [1, 2, 3, 4]: starts_up = True; exits_up = True
             if row in [5, 6, 7, 8]: starts_down = True; exits_down = True
 
-    # 3. НАЗНАЧЕНИЕ СКОРОСТЕЙ
+    # 3. ФИЗИКА ЭНЕРГИИ (С учетом Штопорных Бочек)
     if starts_up: req_speed = 'HS_REQ'
     elif starts_down: req_speed = 'LS_REQ'
     else: req_speed = 'MS_REQ'
@@ -104,7 +93,11 @@ def analyze_figure(f_data):
     elif exits_down: out_speed = 'HS'
     else: out_speed = 'MS'
 
-    if has_spin: req_speed = 'LS_REQ'
+    # ЗАЩИТА: Штопоры и штопорные бочки
+    if has_spin: 
+        req_speed = 'LS_REQ'
+    elif has_flick and req_speed == 'HS_REQ':
+        req_speed = 'MS_REQ' # Запрет на штопорную бочку из крутого пикирования!
 
     changes_axis = does_figure_change_axis(aresti_list)
     is_complex = len(aresti_list) >= 3
@@ -113,26 +106,19 @@ def analyze_figure(f_data):
         "family": family, "sub": sub, "base_code": base, "roll_codes": roll_codes,
         "out_speed": out_speed, "req_speed": req_speed,
         "req_entry": req_entry, "exit_att": exit_att,
-        "is_complex": is_complex, "changes_axis": changes_axis, "has_spin": has_spin
+        "is_complex": is_complex, "changes_axis": changes_axis, "has_spin": has_spin, "has_flick": has_flick
     }
 
 def is_clean_macro(macro, aresti_list):
-    """Свирепый санитар. Уничтожает любой мусор."""
     m = macro.lower()
     if any(w in m for w in ["sequence", "generated", "unknown", "training", "unlimited", "free", "known"]): return False
     if not aresti_list or len(aresti_list[0].split('.')) < 4: return False
-    
     m_let = re.sub(r'[^a-z]', '', m)
     if not m_let: return False 
     if aresti_list[0].startswith("1.1.1.") and len(aresti_list) < 2: return False
-
-    has_spin = any(r.split('.')[1] in ['11', '12', '13'] for r in aresti_list[1:] if len(r.split('.')) == 4)
-    if has_spin and 's' not in m_let: return False
-    if 's' in m_let and not has_spin and not aresti_list[0].startswith('7.5.'): return False
-
     return True
 
-# ИСПРАВЛЕННЫЕ ПАРАШЮТЫ (Теперь 100% правильно возвращают оси и скорости!)
+# ПАРАШЮТЫ С ИДЕАЛЬНЫМИ ОСЯМИ
 def get_y_recovery_figure(att, speed):
     if speed == 'HS': return {"macro": "-h1-" if att == 'I' else "+h1+", "aresti": ["5.2.1.1", "9.1.5.1"] if att == 'U' else ["5.2.1.2", "9.1.5.1"], "req_speed": "HS_REQ", "out_speed": "HS", "req_entry": att, "exit_att": att, "axis": "Y", "changes_axis": True, "is_complex": False, "has_spin": False, "base_code": "5.2.1.1", "roll_codes": ["9.1.5.1"], "family": 5, "sub": 2}
     elif speed == 'LS': return {"macro": "-v1-" if att == 'I' else "+v1+", "aresti": ["1.1.6.3", "9.1.5.1"] if att == 'U' else ["1.1.6.4", "9.1.5.1"], "req_speed": "LS_REQ", "out_speed": "HS", "req_entry": att, "exit_att": att, "axis": "Y", "changes_axis": True, "is_complex": False, "has_spin": False, "base_code": "1.1.6.3", "roll_codes": ["9.1.5.1"], "family": 1, "sub": 1}
@@ -153,7 +139,9 @@ def build_tournament_sequence(length):
     current_att = "U"     
     current_speed = "MS"  
     current_axis = "X"    
-    cons_complex = 0      
+    cons_complex = 0   
+    figures_since_y = 99  # ТАЙМЕР АНТИ-ЗИГЗАГА
+    
     used_bases = set()
     used_rolls = set()
 
@@ -173,33 +161,43 @@ def build_tournament_sequence(length):
         # 1. ЖЕСТКАЯ ФИЗИКА (Склейка положений)
         valid_figs = [f for f in clean_pool if f["req_entry"] == current_att]
 
-        # 2. АБСОЛЮТНЫЙ ЗАКОН СКОРОСТЕЙ (Устранена твоя 7 и 8 ошибка)
+        # 2. ИДЕАЛЬНЫЙ КОНТРОЛЬ СКОРОСТИ
         speed_filtered = []
         for f in valid_figs:
             req = f["req_speed"]
             if current_speed == 'HS' and req == 'HS_REQ': speed_filtered.append(f)
             elif current_speed == 'LS' and req == 'LS_REQ': speed_filtered.append(f)
-            # Из MS можно делать плоские фигуры (MS) или нырять вниз за скоростью (LS)
             elif current_speed == 'MS' and req in ['MS_REQ', 'LS_REQ']: speed_filtered.append(f)
         valid_figs = speed_filtered
 
-        # 3. ЖЕСТКИЙ ЛОК ОСИ Y (Только простые Виражи, Хаммерхеды и Линии для возврата)
+        # 3. АБСОЛЮТНЫЙ ЛОК ОСИ Y + АНТИ-ЗИГЗАГ
         if current_axis == "Y":
+            # На Y разрешен возврат только простыми читаемыми фигурами!
             y_figs = [f for f in valid_figs if f["changes_axis"] and not f["is_complex"] and f["family"] in [1, 2, 5]]
             valid_figs = y_figs
+        else:
+            # АНТИ-ЗИГЗАГ: Запрещаем уходить на Y, если только что оттуда вернулись
+            if figures_since_y < 2:
+                valid_figs = [f for f in valid_figs if not f["changes_axis"]]
+            # Запрещаем уходить на Y в самом конце
+            if i >= length - 2:
+                valid_figs = [f for f in valid_figs if not f["changes_axis"]]
 
-        # 4. СПАСЕНИЕ КОМПЛЕКСА (Идеальными парашютами)
+        # 4. ПАРАШЮТ СПАСЕНИЯ
         if not valid_figs:
             fig = get_y_recovery_figure(current_att, current_speed) if current_axis == "Y" else get_x_recovery_figure(current_att, current_speed)
             sequence.append(fig)
             current_att, current_speed, cons_complex = fig["exit_att"], fig["out_speed"], 0
-            if current_axis == "Y": current_axis = "X"
+            if current_axis == "Y":
+                current_axis = "X"
+                figures_since_y = 0
+            else:
+                figures_since_y += 1
             continue
 
-        # 5. ФИЛЬТРЫ КОМФОРТА И CIVA (Нельзя уходить на Y в конце и повторять фигуры)
+        # 5. ФИЛЬТРЫ КОМФОРТА И CIVA
         strict_figs = []
         for f in valid_figs:
-            if current_axis == "X" and f["changes_axis"] and i >= length - 2: continue 
             if cons_complex >= 2 and f["is_complex"]: continue
             if f["base_code"] in used_bases: continue 
             if any(r in used_rolls for r in f["roll_codes"]): continue 
@@ -208,10 +206,10 @@ def build_tournament_sequence(length):
         if strict_figs:
             fig = random.choice(strict_figs)
         else:
-            f1 = [f for f in valid_figs if (current_axis == "Y" or not f["changes_axis"]) and f["base_code"] not in used_bases and not any(r in used_rolls for r in f["roll_codes"])]
+            f1 = [f for f in valid_figs if f["base_code"] not in used_bases and not any(r in used_rolls for r in f["roll_codes"])]
             if f1: fig = random.choice(f1)
             else:
-                f2 = [f for f in valid_figs if (current_axis == "Y" or not f["changes_axis"]) and f["base_code"] not in used_bases]
+                f2 = [f for f in valid_figs if f["base_code"] not in used_bases]
                 if f2: fig = random.choice(f2)
                 else: fig = random.choice(valid_figs)
 
@@ -223,25 +221,31 @@ def build_tournament_sequence(length):
             "att_out": fig["exit_att"],
             "axis": current_axis,
             "is_complex": fig["is_complex"],
-            "has_spin": fig["has_spin"]
+            "has_spin": fig["has_spin"],
+            "has_flick": fig["has_flick"]
         })
 
         if "base_code" in fig:
             used_bases.add(fig["base_code"])
             used_rolls.update(fig["roll_codes"])
 
-        # Обновление телеметрии
+        # ОБНОВЛЕНИЕ ТЕЛЕМЕТРИИ
         current_att = fig["exit_att"] 
         current_speed = fig["out_speed"]
-        if fig["changes_axis"]: current_axis = "Y" if current_axis == "X" else "X"
         cons_complex = cons_complex + 1 if fig["is_complex"] else 0
+        
+        if fig["changes_axis"]:
+            current_axis = "Y" if current_axis == "X" else "X"
+            figures_since_y = 0
+        else:
+            figures_since_y += 1
 
     return sequence
 
 # --- Streamlit UI ---
 st.set_page_config(page_title="Unlimited World Champ", page_icon="🏆")
-st.title("🏆 Unlimited Pro (The Final Engine)")
-st.write("Исправлены инверсии осей на 270-градусных виражах. Внедрена прямая и жесткая логика крейсерской скорости (MS). Идеальные аварийные маневры.")
+st.title("🏆 Unlimited Pro (Anti-Zigzag & Flick Roll Fix)")
+st.write("Скрипт понимает опасность штопорных бочек (Flick Rolls) на высокой скорости. Встроен жесткий **Анти-Зигзаг**, запрещающий уход на ось Y несколько раз подряд.")
 
 num_figs = st.sidebar.slider("Количество фигур", 5, 15, 10)
 
@@ -257,7 +261,10 @@ if st.button("Сгенерировать комплекс"):
         att_in = "⬆️ Прямо" if fig["att_in"] == "U" else "⬇️ Спина"
         att_out = "⬆️ Прямо" if fig["att_out"] == "U" else "⬇️ Спина"
         spd_icon = "🛑 Stall (LS)" if fig["speed_in"] == "LS" else ("🔥 Energy (HS)" if fig["speed_in"] == "HS" else "💨 Cruiser (MS)")
-        spin_txt = "🌀 **ШТОПОР**" if fig["has_spin"] else ""
+        
+        spin_txt = ""
+        if fig.get("has_spin"): spin_txt = "🌀 **ШТОПОР**"
+        elif fig.get("has_flick"): spin_txt = "⚡ **ШТОПОРНАЯ БОЧКА**"
         
         st.write(f"**{i+1}.** `{fig['macro']}` {spin_txt}")
         st.write(f"&nbsp;&nbsp;&nbsp;&nbsp;*Вход:* {att_in} ({spd_icon}) ➡️ *Выход:* {att_out} | *Арести:* {fig.get('aresti', 'N/A')}")
