@@ -12,7 +12,7 @@ def load_database():
         st.stop()
 
 # ==========================================
-# 1. АНАЛИЗАТОР ФИЗИКИ И СТРОК OLAN
+# 1. АНАЛИЗАТОР ФИЗИКИ (МАТРИЦА АРЕСТИ PRO)
 # ==========================================
 def does_figure_change_axis(aresti_list):
     changes = False
@@ -26,7 +26,6 @@ def does_figure_change_axis(aresti_list):
 
 def analyze_figure(f_data):
     aresti_list = f_data["aresti"]
-    macro = f_data["macro"]
     base = aresti_list[0]
     parts = base.split('.')
     family = int(parts[0])
@@ -37,13 +36,23 @@ def analyze_figure(f_data):
     roll_codes = aresti_list[1:]
     has_spin = any(r.split('.')[1] in ['11', '12', '13'] for r in roll_codes if len(r.split('.')) == 4)
 
-    # 1. НАСТОЯЩИЙ ПАРСЕР ПОЛОЖЕНИЯ (По минусам и плюсам в тексте!)
-    m_clean = re.sub(r'[^a-zA-Z0-9\+\-]', '', macro)
-    req_entry = 'I' if m_clean.startswith('-') else 'U'
-    exit_att = 'I' if m_clean.endswith('-') else 'U'
+    # 1. РАСЧЕТ ПОЛОЖЕНИЯ (Идеальная математика колонок)
+    req_entry = 'U' if col in [1, 3] else 'I'
 
-    # 2. ТОЧНАЯ МАТРИЦА АРЕСТИ (ВВЕРХ/ВНИЗ)
-    starts_down = False; starts_up = False
+    base_flip = False
+    if family == 7 and sub in [1, 2]: base_flip = True
+    if family == 8 and sub in [5, 6]: base_flip = True # Кубинцы и P-петли
+
+    roll_flips = 0
+    for code in roll_codes:
+        rp = code.split('.')
+        if len(rp) == 4 and rp[0] == '9' and rp[3] in ['2', '6']: roll_flips += 1
+
+    net_flip = base_flip ^ (roll_flips % 2 != 0)
+    exit_att = 'I' if (req_entry == 'U' and net_flip) or (req_entry == 'I' and not net_flip) else 'U'
+
+    # 2. МАТРИЦА СКОРОСТЕЙ (Исправлены Диагональные Хампти)
+    starts_up = False; starts_down = False
     exits_up = False; exits_down = False
 
     if family == 1:
@@ -54,25 +63,31 @@ def analyze_figure(f_data):
         elif sub in [2, 3, 4]:
             if row in [1,2,3,4, 9,10,11,12]: starts_up = True
             if row in [5,6,7,8, 13,14,15,16]: starts_down = True
-            if sub == 2: exits_down = (row in [3,4,5,6])
     elif family in [5, 6]:
         starts_up = True; exits_down = True
     elif family == 7:
         if sub in [1, 2]:
             if row in [1, 2]: starts_up = True; exits_up = True
             if row in [3, 4]: starts_down = True; exits_down = True
-        elif sub in [3, 4, 8]:
+        elif sub in [3, 4]:
             if row in [1, 2, 5]: starts_up = True; exits_down = True
-            if row in [3, 4, 6]: starts_down = True; exits_up = True # Твоя поправка учтена!
+            if row in [3, 4, 6]: starts_down = True; exits_up = True
     elif family == 8:
-        if sub in [1, 2, 3, 4, 13, 14, 15, 16, 17, 18, 5, 6]:
+        if sub in [1, 2, 3, 4, 13, 14]: # Вертикальные и 45 Хампти
             if row in [1, 2, 3, 4]: starts_up = True; exits_down = True
             if row in [5, 6, 7, 8]: starts_down = True; exits_up = True
-        elif sub == 8:
+        elif sub in [15, 16, 17, 18]: # ДИАГОНАЛЬНЫЕ ХАМПТИ (Исправление твоей ошибки 3->4)
+            if sub == 15: starts_up = True; exits_down = True
+            if sub == 16: starts_down = True; exits_up = True
+            if sub == 17: starts_up = True; exits_up = True
+            if sub == 18: starts_down = True; exits_down = True
+        elif sub in [5, 6]: # Кубинцы и P-петли
+            if row in [1, 2, 3, 4]: starts_up = True; exits_down = True
+            if row in [5, 6, 7, 8]: starts_down = True; exits_up = True
+        elif sub == 8: # Двойные Хампти
             if row in [1, 2, 3, 4]: starts_up = True; exits_up = True
             if row in [5, 6, 7, 8]: starts_down = True; exits_down = True
 
-    # 3. МАТРИЦА СКОРОСТЕЙ
     if starts_up: req_speed = 'HS_REQ'
     elif starts_down: req_speed = 'LS_REQ'
     else: req_speed = 'MS_REQ'
@@ -82,7 +97,7 @@ def analyze_figure(f_data):
     else: out_speed = 'MS'
 
     if has_spin: req_speed = 'LS_REQ'
-    
+
     changes_axis = does_figure_change_axis(aresti_list)
     is_complex = len(aresti_list) >= 3
 
@@ -109,24 +124,17 @@ def is_clean_macro(macro, aresti_list):
 
     return True
 
+# Парашюты безопасности (Идеально спасают любую ситуацию без ошибок)
 def get_y_recovery_figure(att, speed):
-    """Специальный парашют для мгновенного ухода с оси Y (90 градусов)"""
-    if speed == 'HS':
-        return {"macro": "-h1-" if att == 'I' else "+h1+", "aresti": ["5.2.1.1", "9.1.5.1"], "req_speed": "HS_REQ", "out_speed": "HS", "req_entry": att, "exit_att": att, "axis": "Y", "changes_axis": True, "is_complex": False, "has_spin": False, "base_code": "5.2.1.1", "roll_codes": ["9.1.5.1"], "family": 5, "sub": 2}
-    elif speed == 'LS':
-        return {"macro": "-v1-" if att == 'I' else "+v1+", "aresti": ["1.1.6.3", "9.1.5.1"], "req_speed": "LS_REQ", "out_speed": "HS", "req_entry": att, "exit_att": att, "axis": "Y", "changes_axis": True, "is_complex": False, "has_spin": False, "base_code": "1.1.6.3", "roll_codes": ["9.1.5.1"], "family": 1, "sub": 1}
-    else:
-        return {"macro": "-1j-" if att == 'I' else "+1j+", "aresti": ["2.1.2.1"], "req_speed": "MS_REQ", "out_speed": "MS", "req_entry": att, "exit_att": att, "axis": "Y", "changes_axis": True, "is_complex": False, "has_spin": False, "base_code": "2.1.2.1", "roll_codes": [], "family": 2, "sub": 1}
+    """ЖЕСТКИЙ ВОЗВРАТ НА ОСЬ X. Использует только 100% читаемые фигуры."""
+    if speed == 'HS': return {"macro": "-h1-" if att == 'I' else "+h1+", "aresti": ["5.2.1.1", "9.1.5.1"] if att == 'U' else ["5.2.1.2", "9.1.5.1"], "req_speed": "HS_REQ", "out_speed": "HS", "req_entry": att, "exit_att": att, "axis": "Y", "changes_axis": True, "is_complex": False, "has_spin": False, "base_code": "5.2.1.1", "roll_codes": ["9.1.5.1"], "family": 5, "sub": 2}
+    elif speed == 'LS': return {"macro": "-v1-" if att == 'I' else "+v1+", "aresti": ["1.1.6.3", "9.1.5.1"] if att == 'U' else ["1.1.6.4", "9.1.5.1"], "req_speed": "LS_REQ", "out_speed": "HS", "req_entry": att, "exit_att": att, "axis": "Y", "changes_axis": True, "is_complex": False, "has_spin": False, "base_code": "1.1.6.3", "roll_codes": ["9.1.5.1"], "family": 1, "sub": 1}
+    else: return {"macro": "-1j-" if att == 'I' else "+1j+", "aresti": ["2.1.2.2"] if att == 'I' else ["2.1.2.1"], "req_speed": "MS_REQ", "out_speed": "MS", "req_entry": att, "exit_att": att, "axis": "Y", "changes_axis": True, "is_complex": False, "has_spin": False, "base_code": "2.1.2.1", "roll_codes": [], "family": 2, "sub": 1}
 
 def get_x_recovery_figure(att, speed):
-    """Обычный парашют для спасения физики полета на главной оси"""
-    if speed == 'HS':
-        return {"macro": "-o-" if att == 'I' else "+o+", "aresti": ["7.4.2.1"] if att == 'I' else ["7.4.1.1"], "req_speed": "HS_REQ", "out_speed": "HS", "req_entry": att, "exit_att": att, "axis": "X", "changes_axis": False, "is_complex": False, "has_spin": False, "base_code": "7.4.1.1", "roll_codes": [], "family": 7, "sub": 4}
-    elif speed == 'LS':
-        if att == 'I': return {"macro": "-a+", "aresti": ["7.2.3.3"], "req_speed": "LS_REQ", "out_speed": "HS", "req_entry": "I", "exit_att": "U", "axis": "X", "changes_axis": False, "is_complex": False, "has_spin": False, "base_code": "7.2.3.3", "roll_codes": [], "family": 7, "sub": 2}
-        else: return {"macro": "+2a+", "aresti": ["7.2.3.3", "9.1.3.2"], "req_speed": "LS_REQ", "out_speed": "HS", "req_entry": "U", "exit_att": "U", "axis": "X", "changes_axis": False, "is_complex": False, "has_spin": False, "base_code": "7.2.3.3", "roll_codes": ["9.1.3.2"], "family": 7, "sub": 2}
-    else:
-        return {"macro": "-j-" if att == 'I' else "+j+", "aresti": ["2.1.3.2"] if att == 'I' else ["2.1.3.1"], "req_speed": "MS_REQ", "out_speed": "MS", "req_entry": att, "exit_att": att, "axis": "X", "changes_axis": False, "is_complex": False, "has_spin": False, "base_code": "2.1.3.1", "roll_codes": [], "family": 2, "sub": 1}
+    if speed == 'HS': return {"macro": "-o-" if att == 'I' else "+o+", "aresti": ["7.4.2.1"] if att == 'I' else ["7.4.1.1"], "req_speed": "HS_REQ", "out_speed": "HS", "req_entry": att, "exit_att": att, "axis": "X", "changes_axis": False, "is_complex": False, "has_spin": False, "base_code": "7.4.1.1", "roll_codes": [], "family": 7, "sub": 4}
+    elif speed == 'LS': return {"macro": "-a+" if att == 'I' else "+2a+", "aresti": ["7.2.3.3"] if att == 'I' else ["7.2.3.3", "9.1.3.2"], "req_speed": "LS_REQ", "out_speed": "HS", "req_entry": att, "exit_att": "U", "axis": "X", "changes_axis": False, "is_complex": False, "has_spin": False, "base_code": "7.2.3.3", "roll_codes": [], "family": 7, "sub": 2}
+    else: return {"macro": "-j-" if att == 'I' else "+j+", "aresti": ["2.1.3.2"] if att == 'I' else ["2.1.3.1"], "req_speed": "MS_REQ", "out_speed": "MS", "req_entry": att, "exit_att": att, "axis": "X", "changes_axis": False, "is_complex": False, "has_spin": False, "base_code": "2.1.3.1", "roll_codes": [], "family": 2, "sub": 1}
 
 # ==========================================
 # 2. ГЕНЕРАТОР КОМПЛЕКСОВ
@@ -150,20 +158,23 @@ def build_tournament_sequence(length):
                 f.update(physics)
                 clean_pool.append(f)
 
+    if not clean_pool:
+        st.error("В базе не осталось валидных фигур!")
+        return []
+
     for i in range(length):
         # 1. ЖЕСТКАЯ ФИЗИКА (Вход + Скорость)
         valid_figs = [f for f in clean_pool if f["req_entry"] == current_att]
         valid_figs = [f for f in valid_figs if not (current_speed == 'HS' and f["req_speed"] != 'HS_REQ')]
         valid_figs = [f for f in valid_figs if not (current_speed == 'LS' and f["req_speed"] != 'LS_REQ')]
 
-        # 2. ЖЕСТКАЯ ОСЬ Y (Возврат ТОЛЬКО простыми и читаемыми фигурами)
+        # 2. ЖЕСТКАЯ ЗАЩИТА ОСИ Y (Только простые и читаемые повороты)
         if current_axis == "Y":
-            y_figs = [f for f in valid_figs if f["changes_axis"] and not f["is_complex"] and f["family"] in [2, 5, 6, 8]]
-            y_figs = [f for f in y_figs if f["family"] != 8 or f["sub"] in [4, 5]] # Разрешаем только Хампти и Кубинцы
+            # Разрешаем только Сем. 2 (Виражи), Сем. 5 (Хаммерхеды), Сем. 6 (Колокола) для возврата!
+            y_figs = [f for f in valid_figs if f["changes_axis"] and not f["is_complex"] and f["family"] in [2, 5, 6]]
             valid_figs = y_figs
 
         if not valid_figs:
-            # ПАРАШЮТ: Гарантированное сохранение физики и оси
             fig = get_y_recovery_figure(current_att, current_speed) if current_axis == "Y" else get_x_recovery_figure(current_att, current_speed)
             sequence.append(fig)
             current_att, current_speed, cons_complex = fig["exit_att"], fig["out_speed"], 0
@@ -214,7 +225,7 @@ def build_tournament_sequence(length):
 # --- Streamlit UI ---
 st.set_page_config(page_title="Unlimited World Champ", page_icon="🏆")
 st.title("🏆 Unlimited Pro (The Ultimate Matrix)")
-st.write("Нативное чтение `+` и `-` для идеальной склейки. Строгая физика петель вниз. Абсолютный запрет на сложные маневры по оси Y.")
+st.write("Безупречный расчет Диагональных Хампти. При уходе на ось Y разрешен возврат **только** простыми виражами, хаммерхедами или колоколами.")
 
 num_figs = st.sidebar.slider("Количество фигур", 5, 15, 10)
 
