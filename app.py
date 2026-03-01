@@ -2,32 +2,37 @@ import streamlit as st
 import random
 
 # ==========================================
-# 1. CIVA ВРАЩЕНИЯ С УЧЕТОМ СКОРОСТИ
+# 1. CIVA ВРАЩЕНИЯ С УЧЕТОМ СКОРОСТИ И ОСЕЙ
 # ==========================================
-# HS = High Speed (Скорость > 300 км/ч, штопорные нельзя)
-# MS = Medium Speed (Скорость 180-220 км/ч, штопорные разрешены)
+# HS = High Speed (Скорость > 300 км/ч)
+# MS = Medium Speed (Скорость 180-220 км/ч)
 
 def get_mandatory_flip(speed):
-    """180° вращения для выхода в прямой полет (U-to-U)"""
+    """Обязательные 180° вращения для выхода в прямой полет (U-to-U)"""
+    # Смена направления (opposite) через запятую делает комплекс сложнее и интереснее
     if speed == "MS":
-        return random.choice(["2", "24", "f2", "2,44"]) # Штопорные разрешены
-    return random.choice(["2", "24", "2,44"]) # Только элеронные на большой скорости
+        return random.choice(["2", "24", "f2", "2,44", "2,24", "f,2"]) 
+    return random.choice(["2", "24", "2,44", "2,24"])
 
 def get_stay_roll(speed):
-    """Вращения на 360°, сохраняющие прямое положение"""
+    """Вращения на 360°, сохраняющие прямое положение и ось"""
     if speed == "MS":
-        return random.choice(["4", "44", "f"]) 
-    return random.choice(["4", "44"])
+        return random.choice(["4", "44", "f", "4,44"]) 
+    return random.choice(["4", "44", "4,44"])
 
 def get_y_roll():
     """Смена оси (90° или 270°) на вертикали"""
-    return random.choice(["1", "3", "3f"]) # 3/4 штопорной на вертикали - частая практика
+    # Добавим сложные вращения для ухода на вертикаль (например, 1.25 витка = 14)
+    return random.choice(["1", "3", "3f", "14", "34"]) 
+    
+def get_safe_vert_roll():
+    """Безопасные вращения на вертикали, НЕ меняющие ось (180 или 360)"""
+    # Исключаем '4', так как парсер иногда читает его как 1/4 на нисходящих линиях
+    return random.choice(["2", "44", "24", "f"])
 
 # ==========================================
 # 2. ФИЗИКА ФИГУР (ENERGY MANAGEMENT)
 # ==========================================
-# in_dir: Требуемый вектор входа (UP, DOWN, HORIZ)
-# out_speed: Скорость на выходе из фигуры
 OPENAERO_DICTIONARY = [
     {"olan": "o",  "name": "Петля", "in_dir": "UP", "out_speed": "HS", "slots": [("top", "horizontal")]},
     {"olan": "m",  "name": "Иммельман", "in_dir": "UP", "out_speed": "MS", "slots": [("exit", "mandatory_flip")]},
@@ -38,13 +43,13 @@ OPENAERO_DICTIONARY = [
     {"olan": "h",  "name": "Хаммерхед", "in_dir": "UP", "out_speed": "HS", "slots": [("entry", "vertical"), ("exit", "vertical")]},
     {"olan": "b",  "name": "Humpty Bump", "in_dir": "UP", "out_speed": "HS", "slots": [("entry", "vertical"), ("exit", "vertical")]},
     {"olan": "j",  "name": "Вираж 180", "in_dir": "HORIZ", "out_speed": "MS", "slots": []},
+    # Расширяем базу для сложности:
+    {"olan": "p",  "name": "P-Loop", "in_dir": "UP", "out_speed": "HS", "slots": [("entry", "vertical"), ("exit", "mandatory_flip")]},
     {"olan": "4jio2", "name": "Rolling Circle (1 круг)", "in_dir": "HORIZ", "out_speed": "MS", "slots": []}
 ]
 
 def build_aerodynamic_sequence(length):
     sequence = []
-    
-    # Стартовые условия
     current_speed = "MS" 
     current_axis = "X"
     figures_on_y = 0
@@ -52,16 +57,14 @@ def build_aerodynamic_sequence(length):
     for i in range(length):
         valid_figs = []
         for fig in OPENAERO_DICTIONARY:
-            # ПРАВИЛО 1: Управление энергией (Скорость)
-            # После разгона (HS) можно лететь только ВВЕРХ (UP)
+            # ПРАВИЛО 1: Управление энергией (Speed Management)
             if current_speed == "HS" and fig["in_dir"] != "UP":
                 continue
                 
-            # ПРАВИЛО 2: Контроль поперечной оси (Cross-box)
-            # Нельзя зависать на оси Y дольше одной фигуры. 
+            # ПРАВИЛО 2: Контроль оси Y (Cross-box)
             has_vertical = any(t == "vertical" for _, t in fig["slots"])
             if current_axis == "Y" and figures_on_y >= 1 and not has_vertical:
-                continue # Принудительно заставляем взять фигуру с вертикалью для возврата
+                continue 
                 
             valid_figs.append(fig)
             
@@ -71,28 +74,30 @@ def build_aerodynamic_sequence(length):
         has_vertical = any(t == "vertical" for _, t in fig["slots"])
         need_return_to_x = (current_axis == "Y" and has_vertical)
         go_to_y = (current_axis == "X" and has_vertical and random.random() < 0.25 and i < length - 2)
-        axis_changed = False
+        axis_changed_in_this_fig = False
         
-        # Расставляем бочки
         for slot_pos, slot_type in fig["slots"]:
             if slot_type == "mandatory_flip":
                 rolls[slot_pos] = get_mandatory_flip(current_speed)
                 
             elif slot_type == "horizontal":
-                if random.random() < 0.3:
+                if random.random() < 0.4: # Увеличил шанс бочек для сложности
                     rolls[slot_pos] = get_stay_roll(current_speed)
                     
             elif slot_type == "vertical":
-                # Обработка ухода/возврата на ось Y
-                if (need_return_to_x or go_to_y) and not axis_changed:
+                # СМЕНА ОСИ
+                if (need_return_to_x or go_to_y) and not axis_changed_in_this_fig:
                     rolls[slot_pos] = get_y_roll()
-                    axis_changed = True
+                    axis_changed_in_this_fig = True
                     current_axis = "X" if current_axis == "Y" else "Y"
                     if current_axis == "X":
                         figures_on_y = 0
                 else:
-                    if random.random() < 0.3:
-                        rolls[slot_pos] = random.choice(["4", "44"]) # 360-бочка на вертикали
+                    # ЕСЛИ ОСЬ УЖЕ МЕНЯЛАСЬ В ЭТОЙ ФИГУРЕ - ЖЕСТКО ЗАПРЕЩАЕМ ДРУГИЕ БОЧКИ
+                    # Это исправляет баг рассинхрона парсера OpenAero
+                    if not axis_changed_in_this_fig:
+                        if random.random() < 0.35:
+                            rolls[slot_pos] = get_safe_vert_roll()
                         
         macro = f"{rolls.get('entry', '')}{fig['olan']}{rolls.get('top', '')}{rolls.get('exit', '')}"
         
@@ -103,7 +108,6 @@ def build_aerodynamic_sequence(length):
             "axis": current_axis
         })
         
-        # Обновляем состояния
         current_speed = fig["out_speed"]
         if current_axis == "Y":
             figures_on_y += 1
@@ -115,9 +119,9 @@ def build_aerodynamic_sequence(length):
     return sequence
 
 # --- Streamlit UI ---
-st.set_page_config(page_title="Aero Gen Unlimited", page_icon="🛩️")
-st.title("🏆 Аэродинамический OLAN Генератор")
-st.write("Теперь генератор отслеживает управление энергией (Скорость) и жестко контролирует ось Y.")
+st.set_page_config(page_title="Aero Gen PRO", page_icon="🛩️")
+st.title("🏆 PRO Аэродинамический OLAN Генератор")
+st.write("Сложные связки, контроль скорости и жесткая блокировка рассинхрона поперечной оси.")
 
 num_figs = st.sidebar.slider("Количество фигур", 5, 20, 10)
 
@@ -132,4 +136,4 @@ if st.button("Сгенерировать комплекс"):
     for i, fig in enumerate(complex_data):
         speed_icon = "🔥 HS" if fig["speed_in"] == "HS" else "💨 MS"
         axis_icon = "🔵 X" if fig["axis"] == "X" else "🔴 Y"
-        st.write(f"**{i+1}.** `{fig['macro']}` — {fig['desc']} *(Вход: {speed_icon}, Выход на ось: {axis_icon})*")
+        st.write(f"**{i+1}.** `{fig['macro']}` — {fig['desc']} *(Вход: {speed_icon}, Выход: {axis_icon})*")
