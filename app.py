@@ -129,4 +129,7 @@ if st.button("Сгенерировать комплекс"):
     st.code(final_string, language="text")
     
     st.write("### Телеметрия комплекса:")
-    for i, fig in enumerate(complex_
+    for i, fig in enumerate(complex_data):
+        speed_icon = "🔥 HS" if fig["speed_in"] == "HS" else "💨 MS"
+        axis_icon = "🔵 X" if fig["axis"] == "X" else "🔴 Y"
+        st.write(f"**{i+1}.** `{fig['macro']}` — {fig['desc']} *(Вход: {speed_icon}, Выход на ось: {axis_icon})*")
