@@ -12,56 +12,73 @@ def load_database():
         st.stop()
 
 # ==========================================
-# 1. АНАЛИЗАТОР ФИЗИКИ (ОРИГИНАЛ ОТ 1 МАРТА)
+# 1. АНАЛИЗАТОР ФИЗИКИ И ЯЗЫКА OPENAERO (БАЗА 1 МАРТА)
 # ==========================================
 def does_figure_change_axis(aresti_list):
     changes = False
     for code in aresti_list:
         parts = code.split('.')
         if len(parts) == 4:
-            family = int(parts[0])
-            sub = int(parts[1])
-            row = int(parts[2])
-            col = int(parts[3])
-            
+            family, sub, row, col = map(int, parts)
+            # Виражи (1=90°, 3=270°)
             if family == 2 and sub in [1, 3]: changes = not changes 
+            # Вращения (1/4, 3/4)
             elif family == 9 and col % 2 != 0:
                 if sub <= 10 and row in [3, 5]: changes = not changes
                 elif sub in [11, 12, 13] and row == 1: changes = not changes
     return changes
 
+def get_attitudes(macro, aresti_list):
+    """Идеальное чтение: понимает нативные положения OpenAero по Арести"""
+    m_clean = re.sub(r'[^a-zA-Z0-9\+\-]', '', macro)
+    
+    # Ищем явные знаки, которые форсируют положение
+    explicit_in = 'I' if m_clean.startswith('-') else ('U' if m_clean.startswith('+') else None)
+    explicit_out = 'I' if m_clean.endswith('-') else ('U' if m_clean.endswith('+') else None)
+    
+    # Вычисляем нативное положение (как это делает OpenAero)
+    base = aresti_list[0].split('.')
+    family, sub, row, col = map(int, base) if len(base) == 4 else (0, 0, 0, 0)
+    
+    native_entry = 'U' if col in [1, 3] else 'I'
+    
+    base_flip = False
+    if family == 7 and sub in [1, 2, 3]: base_flip = True
+    if family == 8 and sub in [5, 6, 7]: base_flip = True
+    if family == 1 and sub == 2 and row in [9, 10, 11, 12]: base_flip = True
+    
+    roll_flips = sum(1 for c in aresti_list[1:] if len(c.split('.')) == 4 and c.startswith('9') and c.split('.')[3] in ['2', '6'])
+    net_flip = base_flip ^ (roll_flips % 2 != 0)
+    
+    req_entry = explicit_in if explicit_in else native_entry
+    exit_att = explicit_out if explicit_out else ('I' if (req_entry == 'U' and net_flip) or (req_entry == 'I' and not net_flip) else 'U')
+        
+    return req_entry, exit_att
+
 def analyze_figure(f_data):
     aresti_list = f_data["aresti"]
-    macro = f_data["macro"].lower()
+    macro = f_data["macro"]
     base = aresti_list[0]
     parts = base.split('.')
-    family = int(parts[0])
-    sub = int(parts[1]) if len(parts) > 1 else 0
-    row = int(parts[2]) if len(parts) > 2 else 0
-    col = int(parts[3]) if len(parts) > 3 else 0
+    family, sub, row, col = map(int, parts) if len(parts) == 4 else (0, 0, 0, 0)
 
     roll_codes = aresti_list[1:]
     has_spin = any(r.split('.')[1] in ['11', '12', '13'] for r in roll_codes if len(r.split('.')) == 4)
     has_flick = any(r.split('.')[1] in ['9', '10'] for r in roll_codes if len(r.split('.')) == 4)
 
-    # 1. ЧТЕНИЕ ПОЛОЖЕНИЯ ПО МАКРОСУ (+/-)
-    m_clean = re.sub(r'[^a-z0-9\+\-]', '', macro)
-    req_entry = 'I' if m_clean.startswith('-') else 'U'
-    exit_att = 'I' if m_clean.endswith('-') else 'U'
+    req_entry, exit_att = get_attitudes(macro, aresti_list)
 
-    # 2. МАТРИЦА ВЕКТОРОВ И СКОРОСТЕЙ (ТОТ САМЫЙ РАБОЧИЙ АЛГОРИТМ)
+    # --- ОРИГИНАЛЬНАЯ МАТРИЦА СКОРОСТЕЙ И НАПРАВЛЕНИЙ ---
     starts_up = False; starts_down = False
     exits_up = False; exits_down = False
 
     if family == 1:
-        is_down = any(x in m_clean for x in ['iv', 'it', 'k', 'ik'])
-        is_up = any(x in m_clean for x in ['v', 't', 'p']) and not is_down
+        is_down = any(x in macro.lower() for x in ['iv', 'it', 'k', 'ik'])
+        is_up = any(x in macro.lower() for x in ['v', 't', 'p']) and not is_down
         if is_down: starts_down = True; exits_down = True
         elif is_up: starts_up = True; exits_up = True
-            
     elif family in [5, 6]: 
         starts_up = True; exits_down = True
-        
     elif family == 7: 
         if sub in [1, 2]:
             if row in [1, 2]: starts_up = True; exits_up = True
@@ -69,16 +86,13 @@ def analyze_figure(f_data):
         elif sub in [3, 4]:
             if row in [1, 2, 5]: starts_up = True; exits_down = True
             if row in [3, 4, 6]: starts_down = True; exits_up = True
-            
     elif family == 8:
         if sub in [1, 2, 3, 4, 13, 14]: 
             if row in [1, 2, 3, 4]: starts_up = True; exits_down = True
             if row in [5, 6, 7, 8]: starts_down = True; exits_up = True
         elif sub in [15, 16, 17, 18]: 
-            if sub in [15, 17]: starts_up = True
-            if sub in [16, 18]: starts_down = True
-            if sub in [15, 18]: exits_down = True
-            if sub in [16, 17]: exits_up = True
+            if sub in [15, 17]: starts_up = True; exits_down = True
+            if sub in [16, 18]: starts_down = True; exits_up = True
         elif sub in [5, 6]: 
             if row in [1, 2, 3, 4]: starts_up = True; exits_down = True
             if row in [5, 6, 7, 8]: starts_down = True; exits_up = True
@@ -86,7 +100,6 @@ def analyze_figure(f_data):
             if row in [1, 2, 3, 4]: starts_up = True; exits_up = True
             if row in [5, 6, 7, 8]: starts_down = True; exits_down = True
 
-    # 3. ФИЗИКА ЭНЕРГИИ 
     if starts_up: req_speed = 'HS_REQ'
     elif starts_down: req_speed = 'LS_REQ'
     else: req_speed = 'MS_REQ'
@@ -103,33 +116,31 @@ def analyze_figure(f_data):
 
     return {
         "family": family, "sub": sub, "base_code": base, "roll_codes": roll_codes,
-        "out_speed": out_speed, "req_speed": req_speed,
-        "req_entry": req_entry, "exit_att": exit_att,
+        "req_speed": req_speed, "out_speed": out_speed, "req_entry": req_entry, "exit_att": exit_att,
         "is_complex": is_complex, "changes_axis": changes_axis, "has_spin": has_spin, "has_flick": has_flick,
         "k_factor": f_data.get("k_factor", 15)
     }
 
 def is_clean_macro(macro, aresti_list):
+    # Никакого удаления! База читается как есть. Убираем только системный текст.
     m = macro.lower()
     if any(w in m for w in ["sequence", "generated", "unknown", "training", "unlimited", "free", "known"]): return False
     if not aresti_list or len(aresti_list[0].split('.')) < 4: return False
-    m_let = re.sub(r'[^a-z]', '', m)
-    if not m_let: return False 
     if aresti_list[0].startswith("1.1.1.") and len(aresti_list) < 2: return False
     return True
 
 # ==========================================
-# 2. ПАРАШЮТЫ С ИДЕАЛЬНЫМ OLAN СИНТАКСИСОМ
+# 2. ИДЕАЛЬНЫЕ ПАРАШЮТЫ OLAN
 # ==========================================
 def get_y_recovery_figure(att, speed):
-    if speed == 'HS': return {"macro": "-h4-" if att == 'I' else "+h4+", "aresti": ["5.2.1.2", "9.1.5.1"] if att == 'I' else ["5.2.1.1", "9.1.5.1"], "req_speed": "HS_REQ", "out_speed": "HS", "req_entry": att, "exit_att": att, "axis": "Y", "changes_axis": True, "is_complex": False, "has_spin": False, "has_flick": False, "base_code": "5.2.1.1", "roll_codes": ["9.1.5.1"], "family": 5, "sub": 2, "k_factor": 25}
-    elif speed == 'LS': return {"macro": "-iv4-" if att == 'I' else "+iv4+", "aresti": ["1.1.6.4", "9.1.5.1"] if att == 'I' else ["1.1.6.3", "9.1.5.1"], "req_speed": "LS_REQ", "out_speed": "HS", "req_entry": att, "exit_att": att, "axis": "Y", "changes_axis": True, "is_complex": False, "has_spin": False, "has_flick": False, "base_code": "1.1.6.3", "roll_codes": ["9.1.5.1"], "family": 1, "sub": 1, "k_factor": 15}
-    else: return {"macro": "-1j-" if att == 'I' else "+1j+", "aresti": ["2.1.1.2"] if att == 'I' else ["2.1.1.1"], "req_speed": "MS_REQ", "out_speed": "MS", "req_entry": att, "exit_att": att, "axis": "Y", "changes_axis": True, "is_complex": False, "has_spin": False, "has_flick": False, "base_code": "2.1.1.1", "roll_codes": [], "family": 2, "sub": 1, "k_factor": 10}
+    if speed == 'HS': return {"macro": "-h4-" if att == 'I' else "+h4+", "aresti": ["5.2.1.2", "9.1.5.1"] if att == 'I' else ["5.2.1.1", "9.1.5.1"], "req_speed": "HS_REQ", "out_speed": "HS", "req_entry": att, "exit_att": att, "axis": "Y", "changes_axis": True, "is_complex": False, "has_spin": False, "has_flick": False, "base_code": "5.2.1.1", "roll_codes": ["9.1.5.1"], "k_factor": 25}
+    elif speed == 'LS': return {"macro": "-iv4-" if att == 'I' else "+iv4+", "aresti": ["1.1.6.4", "9.1.5.1"] if att == 'I' else ["1.1.6.3", "9.1.5.1"], "req_speed": "LS_REQ", "out_speed": "HS", "req_entry": att, "exit_att": att, "axis": "Y", "changes_axis": True, "is_complex": False, "has_spin": False, "has_flick": False, "base_code": "1.1.6.3", "roll_codes": ["9.1.5.1"], "k_factor": 15}
+    else: return {"macro": "-1j-" if att == 'I' else "+1j+", "aresti": ["2.1.1.2"] if att == 'I' else ["2.1.1.1"], "req_speed": "MS_REQ", "out_speed": "MS", "req_entry": att, "exit_att": att, "axis": "Y", "changes_axis": True, "is_complex": False, "has_spin": False, "has_flick": False, "base_code": "2.1.1.1", "roll_codes": [], "k_factor": 10}
 
 def get_x_recovery_figure(att, speed):
-    if speed == 'HS': return {"macro": "-o-" if att == 'I' else "+o+", "aresti": ["7.4.2.1"] if att == 'I' else ["7.4.1.1"], "req_speed": "HS_REQ", "out_speed": "HS", "req_entry": att, "exit_att": att, "axis": "X", "changes_axis": False, "is_complex": False, "has_spin": False, "has_flick": False, "base_code": "7.4.1.1", "roll_codes": [], "family": 7, "sub": 4, "k_factor": 12}
-    elif speed == 'LS': return {"macro": "-a+" if att == 'I' else "+2a+", "aresti": ["7.2.3.3"] if att == 'I' else ["7.2.3.3", "9.1.3.2"], "req_speed": "LS_REQ", "out_speed": "HS", "req_entry": att, "exit_att": "U", "axis": "X", "changes_axis": False, "is_complex": False, "has_spin": False, "has_flick": False, "base_code": "7.2.3.3", "roll_codes": [], "family": 7, "sub": 2, "k_factor": 15}
-    else: return {"macro": "-j-" if att == 'I' else "+j+", "aresti": ["2.2.1.2"] if att == 'I' else ["2.2.1.1"], "req_speed": "MS_REQ", "out_speed": "MS", "req_entry": att, "exit_att": att, "axis": "X", "changes_axis": False, "is_complex": False, "has_spin": False, "has_flick": False, "base_code": "2.2.1.1", "roll_codes": [], "family": 2, "sub": 2, "k_factor": 10}
+    if speed == 'HS': return {"macro": "-o-" if att == 'I' else "+o+", "aresti": ["7.4.2.1"] if att == 'I' else ["7.4.1.1"], "req_speed": "HS_REQ", "out_speed": "HS", "req_entry": att, "exit_att": att, "axis": "X", "changes_axis": False, "is_complex": False, "has_spin": False, "has_flick": False, "base_code": "7.4.1.1", "roll_codes": [], "k_factor": 12}
+    elif speed == 'LS': return {"macro": "-a+" if att == 'I' else "+2a+", "aresti": ["7.2.3.3"] if att == 'I' else ["7.2.3.3", "9.1.3.2"], "req_speed": "LS_REQ", "out_speed": "HS", "req_entry": att, "exit_att": "U", "axis": "X", "changes_axis": False, "is_complex": False, "has_spin": False, "has_flick": False, "base_code": "7.2.3.3", "roll_codes": [], "k_factor": 15}
+    else: return {"macro": "-j-" if att == 'I' else "+j+", "aresti": ["2.2.1.2"] if att == 'I' else ["2.2.1.1"], "req_speed": "MS_REQ", "out_speed": "MS", "req_entry": att, "exit_att": att, "axis": "X", "changes_axis": False, "is_complex": False, "has_spin": False, "has_flick": False, "base_code": "2.2.1.1", "roll_codes": [], "k_factor": 10}
 
 # ==========================================
 # 3. ГЕНЕРАТОР КОМПЛЕКСОВ
@@ -156,56 +167,52 @@ def build_tournament_sequence(num_hard, num_link, max_k_total, link_threshold):
         for f in figs:
             if is_clean_macro(f["macro"], f["aresti"]):
                 physics = analyze_figure(f)
-                # Безопасное копирование, чтобы не повредить базу
-                fig_entry = f.copy()
-                fig_entry.update(physics)
-                clean_pool.append(fig_entry)
+                if physics["changes_axis"] and physics["family"] not in [1, 2, 5]: continue
+                
+                # Защита от мутаций: делаем копию словаря
+                fig_copy = f.copy()
+                fig_copy.update(physics)
+                clean_pool.append(fig_copy)
 
     if not clean_pool:
         st.error("В базе не осталось валидных фигур!")
         return []
 
     for i in range(length):
-        # 1. АППАРАТНЫЙ ВОЗВРАТ С ОСИ Y
+        # 1. ПАРАШЮТЫ С ОСИ Y
         if current_axis == "Y":
             fig = get_y_recovery_figure(current_att, current_speed)
             sequence.append({
                 "macro": fig["macro"],
                 "aresti": ", ".join(fig["aresti"]),
-                "speed_in": current_speed,
-                "att_in": current_att,
-                "att_out": fig["exit_att"],
-                "req_speed": fig["req_speed"],
-                "axis": "Y",
-                "k_factor": fig["k_factor"]
+                "speed_in": current_speed, "att_in": current_att, "att_out": fig["exit_att"],
+                "req_speed": fig["req_speed"], "axis": "Y", "k_factor": fig["k_factor"]
             })
-            current_att = fig["exit_att"]
-            current_speed = fig["out_speed"]
-            current_axis = "X"
+            current_att, current_speed, current_axis = fig["exit_att"], fig["out_speed"], "X"
             figures_since_y = 0
             current_k += fig["k_factor"]
             link_count += 1
             cons_hard = 0
             continue
 
-        # 2. ПОИСК ФИГУРЫ НА ОСИ X
+        # 2. ПОИСК И ЗОЛОТОЕ ПРАВИЛО СКОРОСТЕЙ (От 1 Марта)
         valid_figs = [f for f in clean_pool if f["req_entry"] == current_att]
         
-        # ТОТ САМЫЙ РАБОЧИЙ ФИЛЬТР СКОРОСТЕЙ ИЗ 1 МАРТА
         speed_filtered = []
         for f in valid_figs:
             req = f["req_speed"]
             if current_speed == 'HS' and req == 'HS_REQ': speed_filtered.append(f)
             elif current_speed == 'LS' and req == 'LS_REQ': speed_filtered.append(f)
+            # ИЗ MS МОЖНО ТОЛЬКО НЫРЯТЬ ИЛИ В ГОРИЗОНТ:
             elif current_speed == 'MS' and req in ['MS_REQ', 'LS_REQ']: speed_filtered.append(f)
             
         valid_figs = speed_filtered
 
-        # Анти-зигзаг
+        # 3. АНТИ-ЗИГЗАГ
         if figures_since_y < 2 or i >= length - 2:
             valid_figs = [f for f in valid_figs if not f["changes_axis"]]
 
-        # Менеджер K-Фактора
+        # 4. МЕНЕДЖЕР K-ФАКТОРА
         hard_figs = [f for f in valid_figs if f["k_factor"] > link_threshold]
         link_figs = [f for f in valid_figs if f["k_factor"] <= link_threshold]
         
@@ -235,9 +242,10 @@ def build_tournament_sequence(num_hard, num_link, max_k_total, link_threshold):
             fig["base_code"] = "X_REC"
             fig["roll_codes"] = []
 
+        # 5. УПАКОВКА В КОМПЛЕКС (БЕЗ ИЗМЕНЕНИЯ МАКРОСА)
         sequence.append({
             "macro": fig["macro"],
-            "aresti": ", ".join(fig["aresti"]) if isinstance(fig["aresti"], list) else fig["aresti"],
+            "aresti": ", ".join(fig["aresti"]) if isinstance(fig.get("aresti"), list) else fig.get("aresti", ""),
             "speed_in": current_speed, "att_in": current_att, "att_out": fig["exit_att"],
             "req_speed": fig.get("req_speed", ""), "axis": "X", "k_factor": fig.get("k_factor", 15)
         })
@@ -246,20 +254,16 @@ def build_tournament_sequence(num_hard, num_link, max_k_total, link_threshold):
             used_bases.add(fig["base_code"])
             used_rolls.update(fig["roll_codes"])
 
-        current_att = fig["exit_att"] 
-        current_speed = fig["out_speed"]
+        current_att, current_speed = fig["exit_att"], fig["out_speed"]
         current_k += fig.get("k_factor", 15)
         
         if fig.get("k_factor", 15) > link_threshold:
-            hard_count += 1
-            cons_hard += 1
+            hard_count += 1; cons_hard += 1
         else:
-            link_count += 1
-            cons_hard = 0
+            link_count += 1; cons_hard = 0
             
         if fig.get("changes_axis"):
-            current_axis = "Y"
-            figures_since_y = 0
+            current_axis = "Y"; figures_since_y = 0
         else:
             figures_since_y += 1
 
@@ -267,8 +271,8 @@ def build_tournament_sequence(num_hard, num_link, max_k_total, link_threshold):
 
 # --- Streamlit UI ---
 st.set_page_config(page_title="Unlimited World Champ", page_icon="🏆", layout="wide")
-st.title("🏆 Unlimited Pro (The March 1st Base)")
-st.write("Идеальный код от 1 марта восстановлен! Скрипт принимает все фигуры, ничего не переделывает и строго соблюдает физику: из крейсера (MS) можно только вниз или в горизонт.")
+st.title("🏆 Unlimited Pro (Native Aresti Reader + K-Factor)")
+st.write("Код от 1 марта восстановлен! ИИ бережно обращается с макросами из базы, читая положения напрямую из нативных кодов Арести, и строго контролирует бюджет CIVA.")
 
 st.sidebar.header("🛠 Бюджет CIVA")
 num_hard = st.sidebar.slider("Боевые фигуры (Сложные)", 5, 12, 10)
