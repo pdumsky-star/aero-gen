@@ -8,11 +8,11 @@ def load_database():
         with open('civa_database.json', 'r', encoding='utf-8') as f:
             return json.load(f)
     except FileNotFoundError:
-        st.error("❌ Файл civa_database.json не найден! Запустите parser.py")
+        st.error("❌ Файл civa_database.json не найден! Сначала запустите parser.py")
         st.stop()
 
 # ==========================================
-# 1. АНАЛИЗАТОР ФИЗИКИ (БАЗА 1 МАРТА)
+# 1. АНАЛИЗАТОР ФИЗИКИ (ЗОЛОТАЯ БАЗА + ИСПРАВЛЕНИЯ)
 # ==========================================
 def does_figure_change_axis(aresti_list):
     changes = False
@@ -27,6 +27,7 @@ def does_figure_change_axis(aresti_list):
     return changes
 
 def get_attitudes(macro, aresti_list):
+    """Определяет положения входа и выхода, понимая как явные плюсы/минусы, так и нативную математику Арести"""
     m_clean = re.sub(r'[^a-zA-Z0-9\+\-]', '', macro)
     explicit_in = 'I' if m_clean.startswith('-') else ('U' if m_clean.startswith('+') else None)
     explicit_out = 'I' if m_clean.endswith('-') else ('U' if m_clean.endswith('+') else None)
@@ -40,7 +41,7 @@ def get_attitudes(macro, aresti_list):
     if family == 7 and sub in [1, 2, 3]: base_flip = True
     if family == 8 and sub in [5, 6, 7]: base_flip = True
     if family == 1 and sub == 2 and row in [9, 10, 11, 12]: base_flip = True
-    if family == 6 and sub == 2: base_flip = True # ИСПРАВЛЕНИЕ: Колокола (Сем. 6.2) выходят на спине!
+    if family == 6 and sub == 2: base_flip = True # Колокола всегда меняют положение!
     
     roll_flips = sum(1 for c in aresti_list[1:] if len(c.split('.')) == 4 and c.startswith('9') and c.split('.')[3] in ['2', '6'])
     net_flip = base_flip ^ (roll_flips % 2 != 0)
@@ -63,6 +64,7 @@ def analyze_figure(f_data):
 
     req_entry, exit_att = get_attitudes(macro, aresti_list)
 
+    # Определение направления первого движения (Вектор)
     starts_dir = 'HORIZ' 
     out_speed = 'MS'     
 
@@ -81,6 +83,7 @@ def analyze_figure(f_data):
 
     if has_spin: starts_dir = 'SPIN'
 
+    # Определение остаточной скорости на выходе
     if family == 1:
         if sub == 1: out_speed = 'MS' if row <= 5 else ('LS' if col in [1, 2] else 'HS')
         elif sub in [2, 3, 4]: out_speed = 'HS' if row in [3,4,5,6, 10,11,13,16] else 'LS'
@@ -108,7 +111,7 @@ def is_clean_macro(macro, aresti_list):
     return True
 
 # ==========================================
-# 2. ПАРАШЮТЫ С ОСЕЙ
+# 2. ПАРАШЮТЫ С ОСЕЙ (СВЯЗОЧНЫЕ ФИГУРЫ)
 # ==========================================
 def get_y_recovery_figure(att, speed):
     if speed == 'HS': return {"macro": "-h4-" if att == 'I' else "+h4+", "aresti": ["5.2.1.2", "9.1.5.1"] if att == 'I' else ["5.2.1.1", "9.1.5.1"], "starts_dir": "UP", "out_speed": "HS", "req_entry": att, "exit_att": att, "axis": "Y", "changes_axis": True, "is_complex": False, "has_spin": False, "has_flick": False, "k_factor": 25}
@@ -121,7 +124,7 @@ def get_x_recovery_figure(att, speed):
     else: return {"macro": "-j-" if att == 'I' else "+j+", "aresti": ["2.2.1.2"] if att == 'I' else ["2.2.1.1"], "starts_dir": "HORIZ", "out_speed": "MS", "req_entry": att, "exit_att": att, "axis": "X", "changes_axis": False, "is_complex": False, "has_spin": False, "has_flick": False, "k_factor": 10}
 
 # ==========================================
-# 3. ГЕНЕРАТОР КОМПЛЕКСОВ
+# 3. ГЕНЕРАТОР КОМПЛЕКСОВ (С МЕНЕДЖЕРОМ K-ФАКТОРА)
 # ==========================================
 DATABASE = load_database()
 
@@ -152,10 +155,11 @@ def build_tournament_sequence(num_hard, num_link, max_k_total, link_threshold):
                 clean_pool.append(fig_copy)
 
     if not clean_pool:
-        st.error("В базе не осталось валидных фигур!")
+        st.error("В базе не осталось валидных фигур! Проверьте, что parser.py собрал данные.")
         return []
 
     for i in range(length):
+        # 1. Принудительный возврат с оси Y
         if current_axis == "Y":
             fig = get_y_recovery_figure(current_att, current_speed)
             sequence.append({
@@ -171,13 +175,16 @@ def build_tournament_sequence(num_hard, num_link, max_k_total, link_threshold):
             cons_hard = 0
             continue
 
+        # 2. Поиск валидной фигуры на оси X (ЗОЛОТОЕ ПРАВИЛО СКОРОСТЕЙ)
         valid_figs = [f for f in clean_pool if f["req_entry"] == current_att]
         
-        # ТОТ САМЫЙ РАБОЧИЙ ФИЛЬТР СКОРОСТЕЙ ИЗ 1 МАРТА
         speed_filtered = []
         for f in valid_figs:
             sd = f["starts_dir"]
+            # Запрет штопорных бочек на огромной скорости
             if current_speed == 'HS' and f["has_flick"]: continue
+            
+            # Строгая физика энергий
             if current_speed == 'LS' and sd in ['DOWN', 'SPIN']: speed_filtered.append(f)
             elif current_speed == 'HS' and sd in ['UP', 'HORIZ']: speed_filtered.append(f)
             elif current_speed == 'MS' and sd in ['DOWN', 'HORIZ']: speed_filtered.append(f)
@@ -187,6 +194,7 @@ def build_tournament_sequence(num_hard, num_link, max_k_total, link_threshold):
         if figures_since_y < 2 or i >= length - 2:
             valid_figs = [f for f in valid_figs if not f["changes_axis"]]
 
+        # 3. Менеджер бюджета (Боевые vs Связочные)
         hard_figs = [f for f in valid_figs if f["k_factor"] > link_threshold]
         link_figs = [f for f in valid_figs if f["k_factor"] <= link_threshold]
         
@@ -212,6 +220,7 @@ def build_tournament_sequence(num_hard, num_link, max_k_total, link_threshold):
         if strict_figs: fig = random.choice(strict_figs)
         elif pool_to_use: fig = random.choice(pool_to_use)
         else:
+            # Если ничего не подошло - используем парашют
             fig = get_x_recovery_figure(current_att, current_speed)
             fig["base_code"] = "X_REC"
             fig["roll_codes"] = []
@@ -245,8 +254,8 @@ def build_tournament_sequence(num_hard, num_link, max_k_total, link_threshold):
 
 # --- Streamlit UI ---
 st.set_page_config(page_title="Unlimited World Champ", page_icon="🏆", layout="wide")
-st.title("🏆 Unlimited Pro (The Golden March 1st Base)")
-st.write("Перезапустите `parser.py`, чтобы собрать идеальную синхронизированную базу. Движок строго соблюдает правило энергий: MS -> DOWN/HORIZ.")
+st.title("🏆 Unlimited Pro (The Golden Build)")
+st.write("Используется идеальная синхронизированная база из `parser.py` и золотые законы физики: из крейсера (MS) можно только нырять вниз.")
 
 st.sidebar.header("🛠 Бюджет CIVA")
 num_hard = st.sidebar.slider("Боевые фигуры (Сложные)", 5, 12, 10)
