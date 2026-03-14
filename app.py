@@ -12,7 +12,7 @@ def load_database():
         st.stop()
 
 # ==========================================
-# 1. АНАЛИЗАТОР ФИЗИКИ
+# 1. АНАЛИЗАТОР ФИЗИКИ (ВОЗВРАЩЕН СТАРЫЙ РАБОЧИЙ ДВИЖОК)
 # ==========================================
 def does_figure_change_axis(aresti_list):
     changes = False
@@ -43,6 +43,7 @@ def analyze_figure(f_data):
     has_spin = any(r.split('.')[1] in ['11', '12', '13'] for r in roll_codes if len(r.split('.')) == 4)
     has_flick = any(r.split('.')[1] in ['9', '10'] for r in roll_codes if len(r.split('.')) == 4)
 
+    # Старый рабочий гибридный парсер положения
     m_clean = re.sub(r'[^a-z0-9\+\-]', '', macro)
     explicit_entry = 'I' if m_clean.startswith('-') else ('U' if m_clean.startswith('+') else None)
     explicit_exit = 'I' if m_clean.endswith('-') else ('U' if m_clean.endswith('+') else None)
@@ -95,14 +96,19 @@ def analyze_figure(f_data):
 
 def is_clean_macro(macro, aresti_list):
     m = macro.lower()
-    if any(w in m for w in ["sequence", "generated", "unknown", "training", "unlimited", "free", "known"]): return False
+    # ЖЕСТКАЯ ЗАЧИСТКА: Удаляем мусорные символы OpenAero (координаты, тильды, кавычки)
+    if any(char in m for char in ['`', '~', '@', '"', "'", '&', ';', '(', ')', '|']):
+        return False
+    # Удаляем алиасы Unknown фигур (которые OpenAero рисует не по стандарту)
+    bad_words = ["sequence", "generated", "unknown", "training", "unlimited", "free", "known", "ej", "ta", "rc", "bb", "dq", "cc", "qo", "ed"]
+    if any(w in m for w in bad_words): return False
+    
     if not aresti_list or len(aresti_list[0].split('.')) < 4: return False
-    if not re.sub(r'[^a-z]', '', m): return False 
     if aresti_list[0].startswith("1.1.1.") and len(aresti_list) < 2: return False
     return True
 
 # ==========================================
-# 2. ПАРАШЮТЫ СПАСЕНИЯ (Те самые связочные 4 фигуры)
+# 2. ПАРАШЮТЫ СПАСЕНИЯ (Связочные 4 фигуры)
 # ==========================================
 def get_y_recovery_figure(att, speed):
     if speed == 'HS': return {"macro": "-h4-" if att == 'I' else "+h4+", "aresti": ["5.2.1.2", "9.1.5.1"] if att == 'I' else ["5.2.1.1", "9.1.5.1"], "starts_dir": "UP", "out_speed": "HS", "req_entry": att, "exit_att": att, "axis": "Y", "changes_axis": True, "is_complex": False, "has_spin": False, "has_flick": False, "k_factor": 25}
@@ -144,11 +150,10 @@ def build_tournament_sequence(num_hard, num_link, max_k_total, link_threshold):
                 clean_pool.append(f)
 
     if not clean_pool:
-        st.error("База пуста!")
+        st.error("База пуста! Убедитесь, что в civa_database.json есть валидные OLAN макросы.")
         return []
 
     for i in range(length):
-        # 1. ПАРАШЮТ ДЛЯ ОСИ Y (Всегда считаем за Связочную фигуру)
         if current_axis == "Y":
             fig = get_y_recovery_figure(current_att, current_speed)
             sequence.append({"macro": fig["macro"], "aresti": ", ".join(fig["aresti"]), "speed_in": current_speed, "att_in": current_att, "att_out": fig["exit_att"], "starts_dir": fig["starts_dir"], "axis": "Y", "k_factor": fig["k_factor"]})
@@ -161,32 +166,29 @@ def build_tournament_sequence(num_hard, num_link, max_k_total, link_threshold):
 
         valid_figs = [f for f in clean_pool if f["req_entry"] == current_att]
         
-        # Строгая физика скоростей
+        # ВОЗВРАЩЕНА СТАРАЯ, ПРАВИЛЬНАЯ ФИЗИКА (MS может идти вверх!)
         speed_filtered = []
         for f in valid_figs:
             sd = f["starts_dir"]
             if current_speed == 'HS' and f["has_flick"]: continue
             if current_speed == 'LS' and sd in ['DOWN', 'SPIN']: speed_filtered.append(f)
             elif current_speed == 'HS' and sd in ['UP', 'HORIZ']: speed_filtered.append(f)
-            elif current_speed == 'MS' and sd in ['DOWN', 'HORIZ']: speed_filtered.append(f)
+            elif current_speed == 'MS' and sd in ['UP', 'DOWN', 'HORIZ']: speed_filtered.append(f)
         valid_figs = speed_filtered
 
         if figures_since_y < 2 or i >= length - 2:
             valid_figs = [f for f in valid_figs if not f["changes_axis"]]
 
-        # МЕНЕДЖЕР РИТМА (Hard vs Link)
         hard_figs = [f for f in valid_figs if f["k_factor"] > link_threshold]
         link_figs = [f for f in valid_figs if f["k_factor"] <= link_threshold]
         
         force_link = False
         force_hard = False
         
-        # Защита от перегруза: не больше 3 сложных фигур подряд
         if cons_hard >= 3: force_link = True
         elif hard_count >= num_hard: force_link = True
         elif link_count >= num_link: force_hard = True
         
-        # Контроль бюджета (Если осталось мало очков K, берем дешевые фигуры)
         figs_left = length - i
         if figs_left > 0 and ((max_k_total - current_k) / figs_left) < link_threshold:
             force_link = True
@@ -195,14 +197,13 @@ def build_tournament_sequence(num_hard, num_link, max_k_total, link_threshold):
         if force_link and link_figs: pool_to_use = link_figs
         elif force_hard and hard_figs: pool_to_use = hard_figs
         elif hard_figs and link_figs:
-            pool_to_use = hard_figs if random.random() < 0.75 else link_figs # 75% шанс на Боевую
+            pool_to_use = hard_figs if random.random() < 0.75 else link_figs
 
         strict_figs = [f for f in pool_to_use if f["base_code"] not in used_bases and not any(r in used_rolls for r in f["roll_codes"])]
 
         if strict_figs: fig = random.choice(strict_figs)
         elif pool_to_use: fig = random.choice(pool_to_use)
         else:
-            # Если пулы пусты - кидаем парашют
             fig = get_x_recovery_figure(current_att, current_speed)
             fig["base_code"] = "X_REC"
             fig["roll_codes"] = []
@@ -238,7 +239,7 @@ def build_tournament_sequence(num_hard, num_link, max_k_total, link_threshold):
 
 # --- Streamlit UI ---
 st.set_page_config(page_title="Unlimited World Champ", page_icon="🏆", layout="wide")
-st.title("🏆 Unlimited Pro (K-Factor Rhythm Engine)")
+st.title("🏆 Unlimited Pro (Sanitized & K-Factor)")
 
 st.sidebar.header("🛠 Бюджет CIVA")
 num_hard = st.sidebar.slider("Боевые фигуры (Сложные)", 5, 12, 10)
@@ -262,4 +263,3 @@ if st.button("Сгенерировать комплекс"):
         
         st.write(f"**{i+1}.** `{fig['macro']}` | **[{fig['k_factor']}K]** {type_icon}")
         st.write(f"&nbsp;&nbsp;&nbsp;&nbsp;Вход: {att_in} ({spd_icon}) ➡️ Вектор: {dir_icon} | Ось: {fig.get('axis', 'X')}")
-        
