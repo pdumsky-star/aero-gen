@@ -8,11 +8,11 @@ def load_database():
         with open('civa_database.json', 'r', encoding='utf-8') as f:
             return json.load(f)
     except FileNotFoundError:
-        st.error("❌ Файл civa_database.json не найден! Сначала запустите parser.py")
+        st.error("❌ Файл civa_database.json не найден! Запустите parser.py")
         st.stop()
 
 # ==========================================
-# 1. АНАЛИЗАТОР ФИЗИКИ (ЗОЛОТАЯ БАЗА + ИСПРАВЛЕНИЯ)
+# 1. АНАЛИЗАТОР ФИЗИКИ (ИДЕАЛЬНАЯ СИНХРОНИЗАЦИЯ)
 # ==========================================
 def does_figure_change_axis(aresti_list):
     changes = False
@@ -20,14 +20,14 @@ def does_figure_change_axis(aresti_list):
         parts = code.split('.')
         if len(parts) == 4:
             family, sub, row, col = map(int, parts)
-            if family == 2 and sub in [1, 3]: changes = not changes 
+            # Ряды 1 (90°) и 3 (270°) меняют ось
+            if family == 2 and row in [1, 3]: changes = not changes 
             elif family == 9 and col % 2 != 0:
                 if sub <= 10 and row in [3, 5]: changes = not changes
                 elif sub in [11, 12, 13] and row == 1: changes = not changes
     return changes
 
 def get_attitudes(macro, aresti_list):
-    """Определяет положения входа и выхода, понимая как явные плюсы/минусы, так и нативную математику Арести"""
     m_clean = re.sub(r'[^a-zA-Z0-9\+\-]', '', macro)
     explicit_in = 'I' if m_clean.startswith('-') else ('U' if m_clean.startswith('+') else None)
     explicit_out = 'I' if m_clean.endswith('-') else ('U' if m_clean.endswith('+') else None)
@@ -41,7 +41,7 @@ def get_attitudes(macro, aresti_list):
     if family == 7 and sub in [1, 2, 3]: base_flip = True
     if family == 8 and sub in [5, 6, 7]: base_flip = True
     if family == 1 and sub == 2 and row in [9, 10, 11, 12]: base_flip = True
-    if family == 6 and sub == 2: base_flip = True # Колокола всегда меняют положение!
+    if family == 6: base_flip = True # Колокола и скольжения опрокидывают самолет
     
     roll_flips = sum(1 for c in aresti_list[1:] if len(c.split('.')) == 4 and c.startswith('9') and c.split('.')[3] in ['2', '6'])
     net_flip = base_flip ^ (roll_flips % 2 != 0)
@@ -64,7 +64,6 @@ def analyze_figure(f_data):
 
     req_entry, exit_att = get_attitudes(macro, aresti_list)
 
-    # Определение направления первого движения (Вектор)
     starts_dir = 'HORIZ' 
     out_speed = 'MS'     
 
@@ -83,7 +82,6 @@ def analyze_figure(f_data):
 
     if has_spin: starts_dir = 'SPIN'
 
-    # Определение остаточной скорости на выходе
     if family == 1:
         if sub == 1: out_speed = 'MS' if row <= 5 else ('LS' if col in [1, 2] else 'HS')
         elif sub in [2, 3, 4]: out_speed = 'HS' if row in [3,4,5,6, 10,11,13,16] else 'LS'
@@ -103,28 +101,21 @@ def analyze_figure(f_data):
         "has_spin": has_spin, "has_flick": has_flick, "k_factor": f_data.get("k_factor", 15)
     }
 
-def is_clean_macro(macro, aresti_list):
-    m = macro.lower()
-    if any(w in m for w in ["sequence", "generated", "unknown", "training", "unlimited", "free", "known"]): return False
-    if not aresti_list or len(aresti_list[0].split('.')) < 4: return False
-    if aresti_list[0].startswith("1.1.1.") and len(aresti_list) < 2: return False
-    return True
-
 # ==========================================
-# 2. ПАРАШЮТЫ С ОСЕЙ (СВЯЗОЧНЫЕ ФИГУРЫ)
+# 2. ПАРАШЮТЫ С ОСЕЙ
 # ==========================================
 def get_y_recovery_figure(att, speed):
-    if speed == 'HS': return {"macro": "-h4-" if att == 'I' else "+h4+", "aresti": ["5.2.1.2", "9.1.5.1"] if att == 'I' else ["5.2.1.1", "9.1.5.1"], "starts_dir": "UP", "out_speed": "HS", "req_entry": att, "exit_att": att, "axis": "Y", "changes_axis": True, "is_complex": False, "has_spin": False, "has_flick": False, "k_factor": 25}
-    elif speed == 'LS': return {"macro": "-iv4-" if att == 'I' else "+iv4+", "aresti": ["1.1.6.4", "9.1.5.1"] if att == 'I' else ["1.1.6.3", "9.1.5.1"], "starts_dir": "DOWN", "out_speed": "HS", "req_entry": att, "exit_att": att, "axis": "Y", "changes_axis": True, "is_complex": False, "has_spin": False, "has_flick": False, "k_factor": 15}
-    else: return {"macro": "-1j-" if att == 'I' else "+1j+", "aresti": ["2.1.1.2"] if att == 'I' else ["2.1.1.1"], "starts_dir": "HORIZ", "out_speed": "MS", "req_entry": att, "exit_att": att, "axis": "Y", "changes_axis": True, "is_complex": False, "has_spin": False, "has_flick": False, "k_factor": 10}
+    if speed == 'HS': return {"macro": "-h4-" if att == 'I' else "+h4+", "aresti": ["5.2.1.2", "9.1.5.1"] if att == 'I' else ["5.2.1.1", "9.1.5.1"], "starts_dir": "UP", "out_speed": "HS", "req_entry": att, "exit_att": att, "axis": "Y", "changes_axis": True, "k_factor": 25, "has_flick": False}
+    elif speed == 'LS': return {"macro": "-iv4-" if att == 'I' else "+iv4+", "aresti": ["1.1.6.4", "9.1.5.1"] if att == 'I' else ["1.1.6.3", "9.1.5.1"], "starts_dir": "DOWN", "out_speed": "HS", "req_entry": att, "exit_att": att, "axis": "Y", "changes_axis": True, "k_factor": 15, "has_flick": False}
+    else: return {"macro": "-1j-" if att == 'I' else "+1j+", "aresti": ["2.1.1.2"] if att == 'I' else ["2.1.1.1"], "starts_dir": "HORIZ", "out_speed": "MS", "req_entry": att, "exit_att": att, "axis": "Y", "changes_axis": True, "k_factor": 10, "has_flick": False}
 
 def get_x_recovery_figure(att, speed):
-    if speed == 'HS': return {"macro": "-o-" if att == 'I' else "+o+", "aresti": ["7.4.2.1"] if att == 'I' else ["7.4.1.1"], "starts_dir": "UP", "out_speed": "HS", "req_entry": att, "exit_att": att, "axis": "X", "changes_axis": False, "is_complex": False, "has_spin": False, "has_flick": False, "k_factor": 12}
-    elif speed == 'LS': return {"macro": "-a+" if att == 'I' else "+2a+", "aresti": ["7.2.3.3"] if att == 'I' else ["7.2.3.3", "9.1.3.2"], "starts_dir": "DOWN", "out_speed": "HS", "req_entry": att, "exit_att": "U", "axis": "X", "changes_axis": False, "is_complex": False, "has_spin": False, "has_flick": False, "k_factor": 15}
-    else: return {"macro": "-j-" if att == 'I' else "+j+", "aresti": ["2.2.1.2"] if att == 'I' else ["2.2.1.1"], "starts_dir": "HORIZ", "out_speed": "MS", "req_entry": att, "exit_att": att, "axis": "X", "changes_axis": False, "is_complex": False, "has_spin": False, "has_flick": False, "k_factor": 10}
+    if speed == 'HS': return {"macro": "-o-" if att == 'I' else "+o+", "aresti": ["7.4.2.1"] if att == 'I' else ["7.4.1.1"], "starts_dir": "UP", "out_speed": "HS", "req_entry": att, "exit_att": att, "axis": "X", "changes_axis": False, "k_factor": 12, "has_flick": False}
+    elif speed == 'LS': return {"macro": "-a+" if att == 'I' else "+2a+", "aresti": ["7.2.3.3"] if att == 'I' else ["7.2.3.3", "9.1.3.2"], "starts_dir": "DOWN", "out_speed": "HS", "req_entry": att, "exit_att": "U", "axis": "X", "changes_axis": False, "k_factor": 15, "has_flick": False}
+    else: return {"macro": "-j-" if att == 'I' else "+j+", "aresti": ["2.2.1.2"] if att == 'I' else ["2.2.1.1"], "starts_dir": "HORIZ", "out_speed": "MS", "req_entry": att, "exit_att": att, "axis": "X", "changes_axis": False, "k_factor": 10, "has_flick": False}
 
 # ==========================================
-# 3. ГЕНЕРАТОР КОМПЛЕКСОВ (С МЕНЕДЖЕРОМ K-ФАКТОРА)
+# 3. ГЕНЕРАТОР (СТРОГИЕ СКОРОСТИ + МЕНЕДЖЕР K-ФАКТОРА)
 # ==========================================
 DATABASE = load_database()
 
@@ -146,27 +137,23 @@ def build_tournament_sequence(num_hard, num_link, max_k_total, link_threshold):
     clean_pool = []
     for family, figs in DATABASE.items():
         for f in figs:
-            if is_clean_macro(f["macro"], f["aresti"]):
-                physics = analyze_figure(f)
-                if physics["changes_axis"] and physics["family"] not in [1, 2, 5]: continue
-                
-                fig_copy = f.copy()
-                fig_copy.update(physics)
-                clean_pool.append(fig_copy)
+            physics = analyze_figure(f)
+            if physics["changes_axis"] and physics["family"] not in [1, 2, 5]: continue
+            
+            fig_copy = f.copy()
+            fig_copy.update(physics)
+            clean_pool.append(fig_copy)
 
     if not clean_pool:
-        st.error("В базе не осталось валидных фигур! Проверьте, что parser.py собрал данные.")
+        st.error("В базе нет валидных фигур! Проверьте парсер.")
         return []
 
     for i in range(length):
-        # 1. Принудительный возврат с оси Y
         if current_axis == "Y":
             fig = get_y_recovery_figure(current_att, current_speed)
             sequence.append({
-                "macro": fig["macro"],
-                "aresti": ", ".join(fig["aresti"]),
-                "speed_in": current_speed, "att_in": current_att, "att_out": fig["exit_att"],
-                "starts_dir": fig["starts_dir"], "axis": "Y", "k_factor": fig["k_factor"]
+                "macro": fig["macro"], "speed_in": current_speed, "att_in": current_att, 
+                "att_out": fig["exit_att"], "starts_dir": fig["starts_dir"], "axis": "Y", "k_factor": fig["k_factor"]
             })
             current_att, current_speed, current_axis = fig["exit_att"], fig["out_speed"], "X"
             figures_since_y = 0
@@ -175,16 +162,13 @@ def build_tournament_sequence(num_hard, num_link, max_k_total, link_threshold):
             cons_hard = 0
             continue
 
-        # 2. Поиск валидной фигуры на оси X (ЗОЛОТОЕ ПРАВИЛО СКОРОСТЕЙ)
         valid_figs = [f for f in clean_pool if f["req_entry"] == current_att]
         
         speed_filtered = []
         for f in valid_figs:
             sd = f["starts_dir"]
-            # Запрет штопорных бочек на огромной скорости
-            if current_speed == 'HS' and f["has_flick"]: continue
-            
-            # Строгая физика энергий
+            if current_speed == 'HS' and f.get("has_flick"): continue
+            # ЗОЛОТОЕ ПРАВИЛО:
             if current_speed == 'LS' and sd in ['DOWN', 'SPIN']: speed_filtered.append(f)
             elif current_speed == 'HS' and sd in ['UP', 'HORIZ']: speed_filtered.append(f)
             elif current_speed == 'MS' and sd in ['DOWN', 'HORIZ']: speed_filtered.append(f)
@@ -192,11 +176,10 @@ def build_tournament_sequence(num_hard, num_link, max_k_total, link_threshold):
         valid_figs = speed_filtered
 
         if figures_since_y < 2 or i >= length - 2:
-            valid_figs = [f for f in valid_figs if not f["changes_axis"]]
+            valid_figs = [f for f in valid_figs if not f.get("changes_axis")]
 
-        # 3. Менеджер бюджета (Боевые vs Связочные)
-        hard_figs = [f for f in valid_figs if f["k_factor"] > link_threshold]
-        link_figs = [f for f in valid_figs if f["k_factor"] <= link_threshold]
+        hard_figs = [f for f in valid_figs if f.get("k_factor", 15) > link_threshold]
+        link_figs = [f for f in valid_figs if f.get("k_factor", 15) <= link_threshold]
         
         force_link = False
         force_hard = False
@@ -215,26 +198,23 @@ def build_tournament_sequence(num_hard, num_link, max_k_total, link_threshold):
         elif hard_figs and link_figs:
             pool_to_use = hard_figs if random.random() < 0.75 else link_figs
 
-        strict_figs = [f for f in pool_to_use if f["base_code"] not in used_bases and not any(r in f["roll_codes"] for r in used_rolls)]
+        strict_figs = [f for f in pool_to_use if f.get("base_code") not in used_bases and not any(r in f.get("roll_codes", []) for r in used_rolls)]
 
         if strict_figs: fig = random.choice(strict_figs)
         elif pool_to_use: fig = random.choice(pool_to_use)
         else:
-            # Если ничего не подошло - используем парашют
             fig = get_x_recovery_figure(current_att, current_speed)
             fig["base_code"] = "X_REC"
             fig["roll_codes"] = []
 
         sequence.append({
-            "macro": fig["macro"],
-            "aresti": ", ".join(fig["aresti"]) if isinstance(fig.get("aresti"), list) else fig.get("aresti", ""),
-            "speed_in": current_speed, "att_in": current_att, "att_out": fig["exit_att"],
-            "starts_dir": fig.get("starts_dir", ""), "axis": "X", "k_factor": fig.get("k_factor", 15)
+            "macro": fig["macro"], "speed_in": current_speed, "att_in": current_att, 
+            "att_out": fig["exit_att"], "starts_dir": fig.get("starts_dir", ""), "axis": "X", "k_factor": fig.get("k_factor", 15)
         })
 
         if "base_code" in fig and fig["base_code"] != "X_REC":
             used_bases.add(fig["base_code"])
-            used_rolls.update(fig["roll_codes"])
+            used_rolls.update(fig.get("roll_codes", []))
 
         current_att = fig["exit_att"] 
         current_speed = fig["out_speed"]
@@ -254,8 +234,8 @@ def build_tournament_sequence(num_hard, num_link, max_k_total, link_threshold):
 
 # --- Streamlit UI ---
 st.set_page_config(page_title="Unlimited World Champ", page_icon="🏆", layout="wide")
-st.title("🏆 Unlimited Pro (The Golden Build)")
-st.write("Используется идеальная синхронизированная база из `parser.py` и золотые законы физики: из крейсера (MS) можно только нырять вниз.")
+st.title("🏆 Unlimited Pro (True Sync Edition)")
+st.write("Сборка с идеальной синхронизацией базы и золотыми законами физики (MS -> DOWN/HORIZ).")
 
 st.sidebar.header("🛠 Бюджет CIVA")
 num_hard = st.sidebar.slider("Боевые фигуры (Сложные)", 5, 12, 10)
