@@ -12,7 +12,7 @@ def load_database():
         st.stop()
 
 # ==========================================
-# 1. АНАЛИЗАТОР ФИЗИКИ (ВОЗВРАЩЕН СТАРЫЙ РАБОЧИЙ ДВИЖОК)
+# 1. АНАЛИЗАТОР ФИЗИКИ (ВОССТАНОВЛЕННОЕ ЯДРО)
 # ==========================================
 def does_figure_change_axis(aresti_list):
     changes = False
@@ -22,11 +22,13 @@ def does_figure_change_axis(aresti_list):
             family = int(parts[0])
             sub = int(parts[1])
             col = int(parts[3])
+            # Виражи 90 и 270
             if family == 2 and sub in [1, 3]: changes = not changes 
-            elif family == 9:
-                if col % 2 != 0:
-                    if sub <= 10 and int(parts[2]) in [3, 5]: changes = not changes
-                    elif sub in [11, 12, 13] and int(parts[2]) == 1: changes = not changes
+            # Нечетные вращения (1/4, 3/4) на вертикалях и в штопорах
+            elif family == 9 and col % 2 != 0:
+                row = int(parts[2])
+                if sub <= 10 and row in [3, 5]: changes = not changes
+                elif sub in [11, 12, 13] and row == 1: changes = not changes
     return changes
 
 def analyze_figure(f_data):
@@ -43,11 +45,13 @@ def analyze_figure(f_data):
     has_spin = any(r.split('.')[1] in ['11', '12', '13'] for r in roll_codes if len(r.split('.')) == 4)
     has_flick = any(r.split('.')[1] in ['9', '10'] for r in roll_codes if len(r.split('.')) == 4)
 
-    # Старый рабочий гибридный парсер положения
+    # --- ГИБРИДНЫЙ ПАРСЕР ПОЛОЖЕНИЙ ---
+    # Очищаем только для поиска явных плюсов и минусов в начале/конце
     m_clean = re.sub(r'[^a-z0-9\+\-]', '', macro)
     explicit_entry = 'I' if m_clean.startswith('-') else ('U' if m_clean.startswith('+') else None)
     explicit_exit = 'I' if m_clean.endswith('-') else ('U' if m_clean.endswith('+') else None)
 
+    # Нативное положение по Арести
     native_entry = 'U' if col in [1, 3] else 'I'
     base_flip = False
     if family == 7 and sub in [1, 2]: base_flip = True
@@ -61,6 +65,7 @@ def analyze_figure(f_data):
     req_entry = explicit_entry if explicit_entry else native_entry
     exit_att = explicit_exit if explicit_exit else native_exit
 
+    # --- СТРОГАЯ МАТРИЦА НАПРАВЛЕНИЙ И СКОРОСТЕЙ ---
     starts_dir = 'HORIZ' 
     out_speed = 'MS'     
 
@@ -95,20 +100,13 @@ def analyze_figure(f_data):
     }
 
 def is_clean_macro(macro, aresti_list):
-    m = macro.lower()
-    # ЖЕСТКАЯ ЗАЧИСТКА: Удаляем мусорные символы OpenAero (координаты, тильды, кавычки)
-    if any(char in m for char in ['`', '~', '@', '"', "'", '&', ';', '(', ')', '|']):
-        return False
-    # Удаляем алиасы Unknown фигур (которые OpenAero рисует не по стандарту)
-    bad_words = ["sequence", "generated", "unknown", "training", "unlimited", "free", "known", "ej", "ta", "rc", "bb", "dq", "cc", "qo", "ed"]
-    if any(w in m for w in bad_words): return False
-    
+    # БОЛЬШЕ НИКАКИХ УДАЛЕНИЙ ФИГУР С ТИЛЬДАМИ! Принимаем все легитимные Aresti.
     if not aresti_list or len(aresti_list[0].split('.')) < 4: return False
     if aresti_list[0].startswith("1.1.1.") and len(aresti_list) < 2: return False
     return True
 
 # ==========================================
-# 2. ПАРАШЮТЫ СПАСЕНИЯ (Связочные 4 фигуры)
+# 2. АППАРАТНЫЕ ПАРАШЮТЫ ОСЕЙ (Связочные)
 # ==========================================
 def get_y_recovery_figure(att, speed):
     if speed == 'HS': return {"macro": "-h4-" if att == 'I' else "+h4+", "aresti": ["5.2.1.2", "9.1.5.1"] if att == 'I' else ["5.2.1.1", "9.1.5.1"], "starts_dir": "UP", "out_speed": "HS", "req_entry": att, "exit_att": att, "axis": "Y", "changes_axis": True, "is_complex": False, "has_spin": False, "has_flick": False, "k_factor": 25}
@@ -150,10 +148,11 @@ def build_tournament_sequence(num_hard, num_link, max_k_total, link_threshold):
                 clean_pool.append(f)
 
     if not clean_pool:
-        st.error("База пуста! Убедитесь, что в civa_database.json есть валидные OLAN макросы.")
+        st.error("База пуста! Проверьте civa_database.json.")
         return []
 
     for i in range(length):
+        # Аппаратный возврат с оси Y
         if current_axis == "Y":
             fig = get_y_recovery_figure(current_att, current_speed)
             sequence.append({"macro": fig["macro"], "aresti": ", ".join(fig["aresti"]), "speed_in": current_speed, "att_in": current_att, "att_out": fig["exit_att"], "starts_dir": fig["starts_dir"], "axis": "Y", "k_factor": fig["k_factor"]})
@@ -166,19 +165,25 @@ def build_tournament_sequence(num_hard, num_link, max_k_total, link_threshold):
 
         valid_figs = [f for f in clean_pool if f["req_entry"] == current_att]
         
-        # ВОЗВРАЩЕНА СТАРАЯ, ПРАВИЛЬНАЯ ФИЗИКА (MS может идти вверх!)
+        # --- ВОССТАНОВЛЕННАЯ ЗОЛОТАЯ ЛОГИКА СКОРОСТЕЙ ---
         speed_filtered = []
         for f in valid_figs:
             sd = f["starts_dir"]
+            # Блокировка штопорных бочек на большой скорости
             if current_speed == 'HS' and f["has_flick"]: continue
+            
             if current_speed == 'LS' and sd in ['DOWN', 'SPIN']: speed_filtered.append(f)
             elif current_speed == 'HS' and sd in ['UP', 'HORIZ']: speed_filtered.append(f)
-            elif current_speed == 'MS' and sd in ['UP', 'DOWN', 'HORIZ']: speed_filtered.append(f)
+            # ИСПРАВЛЕНИЕ: Из MS можно только вниз (разгон) или горизонт! Никаких UP!
+            elif current_speed == 'MS' and sd in ['DOWN', 'HORIZ']: speed_filtered.append(f)
+            
         valid_figs = speed_filtered
 
+        # Анти-зигзаг
         if figures_since_y < 2 or i >= length - 2:
             valid_figs = [f for f in valid_figs if not f["changes_axis"]]
 
+        # Менеджер K-Фактора
         hard_figs = [f for f in valid_figs if f["k_factor"] > link_threshold]
         link_figs = [f for f in valid_figs if f["k_factor"] <= link_threshold]
         
@@ -239,7 +244,7 @@ def build_tournament_sequence(num_hard, num_link, max_k_total, link_threshold):
 
 # --- Streamlit UI ---
 st.set_page_config(page_title="Unlimited World Champ", page_icon="🏆", layout="wide")
-st.title("🏆 Unlimited Pro (Sanitized & K-Factor)")
+st.title("🏆 Unlimited Pro (Classic Engine + K-Factor)")
 
 st.sidebar.header("🛠 Бюджет CIVA")
 num_hard = st.sidebar.slider("Боевые фигуры (Сложные)", 5, 12, 10)
@@ -256,9 +261,9 @@ if st.button("Сгенерировать комплекс"):
     
     st.write("### Телеметрия:")
     for i, fig in enumerate(complex_data):
-        att_in = "⬆️" if fig["att_in"] == "U" else "⬇️"
+        att_in = "⬆️ Прямо" if fig["att_in"] == "U" else "⬇️ Спина"
         spd_icon = "🛑 Stall" if fig["speed_in"] == "LS" else ("🔥 Fast" if fig["speed_in"] == "HS" else "💨 Cruise")
-        dir_icon = "⬇️" if fig.get("starts_dir") == "DOWN" else ("⬆️" if fig.get("starts_dir") == "UP" else "➡️")
+        dir_icon = "⬇️ Вниз" if fig.get("starts_dir") == "DOWN" else ("⬆️ Вверх" if fig.get("starts_dir") == "UP" else ("➡️ Горизонт" if fig.get("starts_dir") == "HORIZ" else "🌀 Вращение"))
         type_icon = "⚔️ **Боевая**" if fig["k_factor"] > link_threshold else "🔗 *Связочная*"
         
         st.write(f"**{i+1}.** `{fig['macro']}` | **[{fig['k_factor']}K]** {type_icon}")
