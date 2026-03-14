@@ -12,7 +12,7 @@ def load_database():
         st.stop()
 
 # ==========================================
-# 1. АНАЛИЗАТОР ФИЗИКИ (ИДЕАЛЬНАЯ СИНХРОНИЗАЦИЯ)
+# 1. АНАЛИЗАТОР ФИЗИКИ
 # ==========================================
 def does_figure_change_axis(aresti_list):
     changes = False
@@ -20,8 +20,7 @@ def does_figure_change_axis(aresti_list):
         parts = code.split('.')
         if len(parts) == 4:
             family, sub, row, col = map(int, parts)
-            # Ряды 1 (90°) и 3 (270°) меняют ось
-            if family == 2 and row in [1, 3]: changes = not changes 
+            if family == 2 and sub in [1, 3]: changes = not changes 
             elif family == 9 and col % 2 != 0:
                 if sub <= 10 and row in [3, 5]: changes = not changes
                 elif sub in [11, 12, 13] and row == 1: changes = not changes
@@ -41,7 +40,7 @@ def get_attitudes(macro, aresti_list):
     if family == 7 and sub in [1, 2, 3]: base_flip = True
     if family == 8 and sub in [5, 6, 7]: base_flip = True
     if family == 1 and sub == 2 and row in [9, 10, 11, 12]: base_flip = True
-    if family == 6: base_flip = True # Колокола и скольжения опрокидывают самолет
+    if family == 6: base_flip = True 
     
     roll_flips = sum(1 for c in aresti_list[1:] if len(c.split('.')) == 4 and c.startswith('9') and c.split('.')[3] in ['2', '6'])
     net_flip = base_flip ^ (roll_flips % 2 != 0)
@@ -115,7 +114,7 @@ def get_x_recovery_figure(att, speed):
     else: return {"macro": "-j-" if att == 'I' else "+j+", "aresti": ["2.2.1.2"] if att == 'I' else ["2.2.1.1"], "starts_dir": "HORIZ", "out_speed": "MS", "req_entry": att, "exit_att": att, "axis": "X", "changes_axis": False, "k_factor": 10, "has_flick": False}
 
 # ==========================================
-# 3. ГЕНЕРАТОР (СТРОГИЕ СКОРОСТИ + МЕНЕДЖЕР K-ФАКТОРА)
+# 3. ГЕНЕРАТОР КОМПЛЕКСОВ
 # ==========================================
 DATABASE = load_database()
 
@@ -168,7 +167,8 @@ def build_tournament_sequence(num_hard, num_link, max_k_total, link_threshold):
         for f in valid_figs:
             sd = f["starts_dir"]
             if current_speed == 'HS' and f.get("has_flick"): continue
-            # ЗОЛОТОЕ ПРАВИЛО:
+            
+            # ЗОЛОТОЕ ПРАВИЛО
             if current_speed == 'LS' and sd in ['DOWN', 'SPIN']: speed_filtered.append(f)
             elif current_speed == 'HS' and sd in ['UP', 'HORIZ']: speed_filtered.append(f)
             elif current_speed == 'MS' and sd in ['DOWN', 'HORIZ']: speed_filtered.append(f)
@@ -234,8 +234,8 @@ def build_tournament_sequence(num_hard, num_link, max_k_total, link_threshold):
 
 # --- Streamlit UI ---
 st.set_page_config(page_title="Unlimited World Champ", page_icon="🏆", layout="wide")
-st.title("🏆 Unlimited Pro (True Sync Edition)")
-st.write("Сборка с идеальной синхронизацией базы и золотыми законами физики (MS -> DOWN/HORIZ).")
+st.title("🏆 Unlimited Pro (Database Synced)")
+st.write("Генератор работает на чистой базе. Соблюдает строгие законы энергий.")
 
 st.sidebar.header("🛠 Бюджет CIVA")
 num_hard = st.sidebar.slider("Боевые фигуры (Сложные)", 5, 12, 10)
