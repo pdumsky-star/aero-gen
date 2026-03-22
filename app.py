@@ -12,26 +12,28 @@ def load_database():
         st.stop()
 
 # ==========================================
-# 1. АНАЛИЗАТОР ФИЗИКИ (ОРИГИНАЛ 01.03.26)
+# 1. АНАЛИЗАТОР ФИЗИКИ (БАЗА 01.03 + ПАТЧИ ЗНАНИЙ)
 # ==========================================
 def does_figure_change_axis(aresti_list):
     changes = False
     for code in aresti_list:
         parts = code.split('.')
         if len(parts) == 4:
-            family = int(parts[0])
-            sub = int(parts[1])
-            row = int(parts[2])
-            col = int(parts[3])
-            if family == 2 and sub in [1, 3]: changes = not changes 
-            elif family == 9 and col % 2 != 0:
-                if sub <= 10 and row in [3, 5]: changes = not changes
-                elif sub in [11, 12, 13] and row == 1: changes = not changes
+            family, sub, row, col = map(int, parts)
+            
+            # --- ПАТЧ ЗНАНИЙ: ОСИ ---
+            # Виражи (Сем 2): 90° и 270° лежат в рядах 1 и 3
+            if family == 2 and row in [1, 3]: 
+                changes = not changes 
+            # Вращения (Сем 9): 1/4 и 3/4 бочки меняют ось только на вертикалях
+            elif family == 9 and col in [3, 4, 5, 7]:
+                if row in [3, 5] or sub >= 11: 
+                    changes = not changes
     return changes
 
 def analyze_figure(f_data):
     aresti_list = f_data["aresti"]
-    macro = f_data["macro"].lower()
+    macro = f_data["macro"]
     base = aresti_list[0]
     parts = base.split('.')
     family = int(parts[0])
@@ -43,29 +45,22 @@ def analyze_figure(f_data):
     has_spin = any(r.split('.')[1] in ['11', '12', '13'] for r in roll_codes if len(r.split('.')) == 4)
     has_flick = any(r.split('.')[1] in ['9', '10'] for r in roll_codes if len(r.split('.')) == 4)
 
-    m_clean = re.sub(r'[^a-z0-9\+\-]', '', macro)
+    # --- ПАРСЕР ПОЛОЖЕНИЙ 01.03 ---
+    m_clean = re.sub(r'[^a-zA-Z0-9\+\-]', '', macro)
     explicit_entry = 'I' if m_clean.startswith('-') else ('U' if m_clean.startswith('+') else None)
     explicit_exit = 'I' if m_clean.endswith('-') else ('U' if m_clean.endswith('+') else None)
 
     native_entry = 'U' if col in [1, 3] else 'I'
 
     base_flip = False
-    if family == 7 and sub in [1, 2, 3]: base_flip = True
-    if family == 8 and sub in [5, 6, 7, 8]: base_flip = True
+    if family == 7 and sub in [1, 2]: base_flip = True
     if family == 6: base_flip = True 
-
-    # === ДОПОЛНИТЕЛЬНЫЕ ДАННЫЕ (ПАТЧИ И ИСКЛЮЧЕНИЯ АРЕСТИ) ===
-    # Добавлено по требованию для точечного исправления багов положений
     
-    # Патч 1: Линии (Сем 1.2) с push-выходом (четные ряды) всегда переворачивают
-    if family == 1 and sub == 2 and row in [2, 4, 6, 8]: base_flip = True
-    
-    # Патч 2: Половинки квадратных петель (Сем 7.4) переворачивают
-    if family == 7 and sub == 4 and col in [3, 4]: base_flip = True
-    
-    # Патч 3: Double Humpties (Сем 8.8) НЕ переворачивают самолет
-    if family == 8 and sub == 8: base_flip = False
-    # ===========================================================
+    # --- ПАТЧ ЗНАНИЙ: ПЕРЕВОРОТЫ ---
+    # Полукубанки и Реверс-полукубанки переворачивают
+    if family == 8 and sub in [5, 6]: base_flip = True
+    # Линии с push-выходом (четные ряды) переворачивают
+    if family == 1 and sub >= 2 and row in [2, 4, 6, 8]: base_flip = True
 
     roll_flips = sum(1 for c in roll_codes if len(c.split('.')) == 4 and c.startswith('9') and c.split('.')[3] in ['2', '6'])
     net_flip = base_flip ^ (roll_flips % 2 != 0)
@@ -75,14 +70,12 @@ def analyze_figure(f_data):
     req_entry = explicit_entry if explicit_entry else native_entry
     exit_att = explicit_exit if explicit_exit else native_exit
 
+    # --- МАТРИЦА СКОРОСТЕЙ 01.03 ---
     starts_up = False; starts_down = False
     exits_up = False; exits_down = False
 
     if family == 1:
-        if sub == 1:
-            if row == 6: starts_up = True; exits_up = True
-            elif row == 7: starts_down = True; exits_down = True
-        elif sub >= 2:
+        if sub >= 2:
             if row in [1, 2, 3, 4, 9, 10, 13, 14]: starts_up = True
             else: starts_down = True
             if sub == 2:
@@ -100,19 +93,22 @@ def analyze_figure(f_data):
         elif sub in [3, 4]:
             if row in [1, 2, 5]: starts_up = True; exits_down = True
             if row in [3, 4, 6]: starts_down = True; exits_up = True
-    elif family == 8:
-        if sub in [1, 2, 3, 4, 13, 14]: 
+
+    # --- ПАТЧ ЗНАНИЙ: СКОРОСТИ ---
+    if family == 1 and sub == 1:
+        # Одинарные линии
+        if row in [6, 7]: starts_up = True; exits_up = True
+        elif row in [8, 9]: starts_down = True; exits_down = True
+        
+    if family == 8:
+        # Хумпти, Кубанки, Реверс-Кубанки
+        if sub in [4, 5, 6, 7]:
             if row in [1, 2, 3, 4]: starts_up = True; exits_down = True
-            if row in [5, 6, 7, 8]: starts_down = True; exits_up = True
-        elif sub in [15, 16, 17, 18]: 
-            if sub in [15, 17]: starts_up = True; exits_down = True
-            if sub in [16, 18]: starts_down = True; exits_up = True
-        elif sub in [5, 6]: 
-            if row in [1, 2, 3, 4]: starts_up = True; exits_down = True
-            if row in [5, 6, 7, 8]: starts_down = True; exits_up = True
-        elif sub == 8: 
+            else: starts_down = True; exits_up = True
+        # Двойные Хумпти
+        elif sub == 8:
             if row in [1, 2, 3, 4]: starts_up = True; exits_up = True
-            if row in [5, 6, 7, 8]: starts_down = True; exits_down = True
+            else: starts_down = True; exits_down = True
 
     if starts_up: req_speed = 'HS_REQ'
     elif starts_down: req_speed = 'LS_REQ'
@@ -122,15 +118,7 @@ def analyze_figure(f_data):
     elif exits_down: out_speed = 'HS'
     else: out_speed = 'MS'
 
-    # === ДОПОЛНИТЕЛЬНЫЕ ДАННЫЕ (ПАТЧИ СКОРОСТЕЙ) ===
-    # Патч 4: Точные скорости выхода для Double Humpty
-    if family == 8 and sub == 8:
-        if row in [1, 2, 7, 8]: out_speed = 'HS'
-        elif row in [3, 4, 5, 6]: out_speed = 'LS'
-        
     if has_spin: req_speed = 'LS_REQ'
-    # УДАЛЕНА СТРОКА С ПОНИЖЕНИЕМ СКОРОСТИ ИЗ-ЗА ШТОПОРНОЙ БОЧКИ!
-    # (Именно она вызывала баги 1-2 и 9-10. OpenAero требует строгой скорости).
 
     changes_axis = does_figure_change_axis(aresti_list)
     is_complex = len(aresti_list) >= 3
@@ -164,7 +152,7 @@ def get_x_recovery_figure(att, speed):
     else: return {"macro": "-j-" if att == 'I' else "+j+", "aresti": ["2.2.1.2"] if att == 'I' else ["2.2.1.1"], "req_speed": "MS_REQ", "out_speed": "MS", "req_entry": att, "exit_att": att, "axis": "X", "changes_axis": False, "k_factor": 10}
 
 # ==========================================
-# 3. ГЕНЕРАТОР КОМПЛЕКСОВ (СТРОГИЕ СКОРОСТИ + K-ФАКТОР)
+# 3. ГЕНЕРАТОР КОМПЛЕКСОВ (ОРИГИНАЛ 01.03)
 # ==========================================
 DATABASE = load_database()
 
@@ -186,13 +174,12 @@ def build_tournament_sequence(num_hard, num_link, max_k_total, link_threshold):
     clean_pool = []
     for family, figs in DATABASE.items():
         for f in figs:
-            if is_clean_macro(f["macro"], f["aresti"]):
-                physics = analyze_figure(f)
-                if physics["changes_axis"] and physics["family"] not in [1, 2, 5]: continue
-                
-                fig_copy = f.copy()
-                fig_copy.update(physics)
-                clean_pool.append(fig_copy)
+            physics = analyze_figure(f)
+            if physics["changes_axis"] and physics["family"] not in [1, 2, 5, 9]: continue
+            
+            fig_copy = f.copy()
+            fig_copy.update(physics)
+            clean_pool.append(fig_copy)
 
     if not clean_pool:
         st.error("В базе нет валидных фигур!")
@@ -212,11 +199,12 @@ def build_tournament_sequence(num_hard, num_link, max_k_total, link_threshold):
 
         valid_figs = [f for f in clean_pool if f["req_entry"] == current_att]
         
-        # ОРИГИНАЛЬНЫЙ ФИЛЬТР СКОРОСТЕЙ 01.03 (Без поблажек!)
         speed_filtered = []
         for f in valid_figs:
             req = f["req_speed"]
+            if current_speed == 'HS' and f.get("has_flick"): continue
             
+            # ЗОЛОТОЕ ПРАВИЛО СКОРОСТЕЙ 01.03
             if current_speed == 'HS' and req == 'HS_REQ': speed_filtered.append(f)
             elif current_speed == 'LS' and req == 'LS_REQ': speed_filtered.append(f)
             elif current_speed == 'MS' and req in ['MS_REQ', 'LS_REQ']: speed_filtered.append(f)
@@ -254,7 +242,7 @@ def build_tournament_sequence(num_hard, num_link, max_k_total, link_threshold):
             fig["base_code"] = "X_REC"
             fig["roll_codes"] = []
 
-        # МАКРОС ПЕРЕДАЕТСЯ АБСОЛЮТНО БЕЗ ИЗМЕНЕНИЙ (Read-Only)
+        # МАКРОС ПЕРЕДАЕТСЯ КАК ЕСТЬ (Read-Only)
         sequence.append({
             "macro": fig["macro"], "speed_in": current_speed, "att_in": current_att, 
             "att_out": fig["exit_att"], "req_speed": fig.get("req_speed", ""), "axis": "X", "k_factor": fig.get("k_factor", 15)
@@ -282,8 +270,8 @@ def build_tournament_sequence(num_hard, num_link, max_k_total, link_threshold):
 
 # --- Streamlit UI ---
 st.set_page_config(page_title="Unlimited World Champ", page_icon="🏆", layout="wide")
-st.title("🏆 Unlimited Pro (The Data-Patched 01.03 Base)")
-st.write("Сборка полностью работает на коде 01.03. Добавлен словарь данных для точечного исправления Хумпти-Бампов и Линий.")
+st.title("🏆 Unlimited Pro (Patched 01.03 Base)")
+st.write("Используется оригинальный алгоритм 01.03. Добавлены точечные данные (патчи) для правильного понимания осей виражей и скоростей полукубанок.")
 
 st.sidebar.header("🛠 Бюджет CIVA")
 num_hard = st.sidebar.slider("Боевые фигуры (Сложные)", 5, 12, 10)
