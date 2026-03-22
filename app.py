@@ -232,3 +232,78 @@ def build_tournament_sequence(num_hard, num_link, max_k_total, link_threshold):
         force_link = False; force_hard = False
         
         if cons_hard >= 3: force_link = True
+        elif hard_count >= num_hard: force_link = True
+        elif link_count >= num_link: force_hard = True
+        
+        figs_left = length - i
+        if figs_left > 0 and ((max_k_total - current_k) / figs_left) < link_threshold:
+            force_link = True
+            
+        pool_to_use = valid_figs
+        if force_link and link_figs: pool_to_use = link_figs
+        elif force_hard and hard_figs: pool_to_use = hard_figs
+        elif hard_figs and link_figs:
+            pool_to_use = hard_figs if random.random() < 0.75 else link_figs
+
+        strict_figs = [f for f in pool_to_use if f.get("base_code") not in used_bases and not any(r in f.get("roll_codes", []) for r in used_rolls)]
+
+        if strict_figs: fig = random.choice(strict_figs)
+        elif pool_to_use: fig = random.choice(pool_to_use)
+        else:
+            fig = get_x_recovery_figure(current_att, current_speed)
+            fig["base_code"] = "X_REC"
+            fig["roll_codes"] = []
+
+        # МАКРОС ПЕРЕДАЕТСЯ АБСОЛЮТНО БЕЗ ИЗМЕНЕНИЙ (Read-Only)
+        sequence.append({
+            "macro": fig["macro"], "speed_in": current_speed, "att_in": current_att, 
+            "att_out": fig["exit_att"], "req_speed": fig.get("req_speed", ""), "axis": "X", "k_factor": fig.get("k_factor", 15)
+        })
+
+        if "base_code" in fig and fig["base_code"] != "X_REC":
+            used_bases.add(fig["base_code"])
+            used_rolls.update(fig.get("roll_codes", []))
+
+        current_att = fig["exit_att"] 
+        current_speed = fig["out_speed"]
+        current_k += fig.get("k_factor", 15)
+        
+        if fig.get("k_factor", 15) > link_threshold:
+            hard_count += 1; cons_hard += 1
+        else:
+            link_count += 1; cons_hard = 0
+            
+        if fig.get("changes_axis"):
+            current_axis = "Y"; figures_since_y = 0
+        else:
+            figures_since_y += 1
+
+    return sequence, current_k
+
+# --- Streamlit UI ---
+st.set_page_config(page_title="Unlimited World Champ", page_icon="🏆", layout="wide")
+st.title("🏆 Unlimited Pro (The Data-Patched 01.03 Base)")
+st.write("Сборка полностью работает на коде 01.03. Добавлен словарь данных для точечного исправления Хумпти-Бампов и Линий.")
+
+st.sidebar.header("🛠 Бюджет CIVA")
+num_hard = st.sidebar.slider("Боевые фигуры (Сложные)", 5, 12, 10)
+num_link = st.sidebar.slider("Связочные фигуры (Простые)", 2, 6, 4)
+max_k_total = st.sidebar.slider("Лимит сложности (Max Total K)", 300, 500, 420)
+link_threshold = st.sidebar.slider("Порог K-фактора (Связочная <= K)", 10, 35, 25)
+
+if st.button("Сгенерировать комплекс"):
+    complex_data, total_k = build_tournament_sequence(num_hard, num_link, max_k_total, link_threshold)
+    final_string = " ".join([fig["macro"] for fig in complex_data])
+    
+    st.success(f"✅ Готово! Итоговый K-Фактор: **{total_k}K**")
+    st.code(final_string, language="text")
+    
+    st.write("### Телеметрия:")
+    for i, fig in enumerate(complex_data):
+        att_in = "⬆️ Прямо" if fig["att_in"] == "U" else "⬇️ Спина"
+        spd_icon = "🛑 Stall (LS)" if fig["speed_in"] == "LS" else ("🔥 Fast (HS)" if fig["speed_in"] == "HS" else "💨 Cruise (MS)")
+        req_icon = "⬇️ Разгон (LS_REQ)" if fig.get("req_speed") == "LS_REQ" else ("⬆️ Энергия (HS_REQ)" if fig.get("req_speed") == "HS_REQ" else "➡️ Горизонт (MS_REQ)")
+        type_icon = "⚔️ **Боевая**" if fig["k_factor"] > link_threshold else "🔗 *Связочная*"
+        
+        st.write(f"**{i+1}.** `{fig['macro']}` | **[{fig['k_factor']}K]** {type_icon}")
+        st.write(f"&nbsp;&nbsp;&nbsp;&nbsp;Вход: {att_in} ({spd_icon}) ➡️ Фигура просит: {req_icon} | Ось: {fig.get('axis', 'X')}")
